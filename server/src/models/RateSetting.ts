@@ -38,6 +38,9 @@ const RateSettingSchema = new Schema<IRateSetting>(
 );
 
 RateSettingSchema.index({ effectiveFrom: -1 });
+// Unique: only one global rate setting per effective date.
+// Insert a NEW record when assumptions change — never update an existing one.
+RateSettingSchema.index({ effectiveFrom: 1 }, { unique: true });
 
 export const RateSetting = mongoose.model<IRateSetting>('RateSetting', RateSettingSchema);
 

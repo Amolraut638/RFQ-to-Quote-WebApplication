@@ -27,6 +27,9 @@ const MachineRateSchema = new Schema<IMachineRate>(
 );
 
 MachineRateSchema.index({ machine: 1, effectiveFrom: -1 });
+// Unique: a given machine can only have one rate per effective date.
+// Insert a NEW record when a rate changes — never update an existing one.
+MachineRateSchema.index({ machine: 1, effectiveFrom: 1 }, { unique: true });
 
 export const MachineRate = mongoose.model<IMachineRate>('MachineRate', MachineRateSchema);
 

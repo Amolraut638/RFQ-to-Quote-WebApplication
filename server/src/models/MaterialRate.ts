@@ -27,6 +27,9 @@ const MaterialRateSchema = new Schema<IMaterialRate>(
 );
 
 MaterialRateSchema.index({ material: 1, effectiveFrom: -1 });
+// Unique: a given material can only have one rate per effective date.
+// Insert a NEW record when a rate changes — never update an existing one.
+MaterialRateSchema.index({ material: 1, effectiveFrom: 1 }, { unique: true });
 
 export const MaterialRate = mongoose.model<IMaterialRate>('MaterialRate', MaterialRateSchema);
 
