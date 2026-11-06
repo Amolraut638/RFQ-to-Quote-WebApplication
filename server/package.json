@@ -6,7 +6,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "seed": "tsx src/seed/seed.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -32,7 +34,7 @@
     "@types/node": "^20.0.0",
     "@types/pdfkit": "^0.13.4",
     "tsx": "^4.11.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.1"
   }
 }
-
