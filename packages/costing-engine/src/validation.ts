@@ -208,16 +208,17 @@ export function validateCostingInput(input: CostingInput): ValidatedCostingInput
   }
   const gstPct = isMissing(rawGst) ? null : validatePercentage(rawGst, 'gstPct', PERCENT_MAX.gstPct, issues);
 
-  // --- annualVolume (must be a positive integer typeof number) ---
+  // --- annualVolume (must be a positive safe integer typeof number) ---
+  // Number.isSafeInteger rejects values beyond ±2^53-1 that cannot be
+  // represented exactly as IEEE-754 doubles, preventing silent precision loss.
   const rawVolume = (input as unknown as Record<string, unknown>).annualVolume;
   let annualVolume: number | null = null;
   if (
     typeof rawVolume !== 'number' ||
-    !Number.isFinite(rawVolume) ||
-    !Number.isInteger(rawVolume) ||
+    !Number.isSafeInteger(rawVolume) ||
     rawVolume <= 0
   ) {
-    issues.push({ code: 'INVALID_VOLUME', field: 'annualVolume', message: `annualVolume must be a positive integer, got ${JSON.stringify(rawVolume)}` });
+    issues.push({ code: 'INVALID_VOLUME', field: 'annualVolume', message: `annualVolume must be a positive safe integer, got ${JSON.stringify(rawVolume)}` });
   } else {
     annualVolume = rawVolume;
   }

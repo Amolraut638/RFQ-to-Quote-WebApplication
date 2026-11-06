@@ -43,11 +43,10 @@ export const BASE_TIER_PERCENTAGE = 100;
 export function computeTierVolume(annual: number, pct: number): number {
   if (
     typeof annual !== 'number' ||
-    !Number.isFinite(annual) ||
-    !Number.isInteger(annual) ||
+    !Number.isSafeInteger(annual) ||
     annual <= 0
   ) {
-    throw new CostingError([{ code: 'INVALID_VOLUME', field: 'annualVolume', message: `annualVolume must be a positive integer, got ${JSON.stringify(annual)}` }]);
+    throw new CostingError([{ code: 'INVALID_VOLUME', field: 'annualVolume', message: `annualVolume must be a positive safe integer, got ${JSON.stringify(annual)}` }]);
   }
   if (typeof pct !== 'number' || !Number.isFinite(pct) || pct <= 0) {
     throw new CostingError([{ code: 'INVALID_VOLUME', field: 'tierPercentage', message: `tier percentage must be a positive number, got ${JSON.stringify(pct)}` }]);

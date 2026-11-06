@@ -46,6 +46,29 @@ describe('Integer-volume policy: volume × % / 100, rounded half-up to whole pie
     expect(() => computeTierVolume(bad, 100)).toThrow(CostingError);
   });
 
+  it('accepts Number.MAX_SAFE_INTEGER as a valid annual volume', () => {
+    // MAX_SAFE_INTEGER × 100 / 100 = MAX_SAFE_INTEGER — no precision loss
+    expect(computeTierVolume(Number.MAX_SAFE_INTEGER, 100)).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('rejects Number.MAX_SAFE_INTEGER + 1 (not a safe integer)', () => {
+    expect(() => computeTierVolume(Number.MAX_SAFE_INTEGER + 1, 100)).toThrow(CostingError);
+    try {
+      computeTierVolume(Number.MAX_SAFE_INTEGER + 1, 100);
+    } catch (e) {
+      expect((e as CostingError).code).toBe('INVALID_VOLUME');
+    }
+  });
+
+  it('rejects fractional annual volume 1.5', () => {
+    expect(() => computeTierVolume(1.5, 100)).toThrow(CostingError);
+    try {
+      computeTierVolume(1.5, 100);
+    } catch (e) {
+      expect((e as CostingError).code).toBe('INVALID_VOLUME');
+    }
+  });
+
   it.each([0, -50, NaN])('rejects invalid tier percentage %j', (bad) => {
     expect(() => computeTierVolume(1000, bad)).toThrow(CostingError);
   });

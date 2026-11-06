@@ -129,6 +129,26 @@ describe('Annual volume', () => {
   it.each([0, -1, -500, 1.5, NaN, Infinity, undefined, null, '1000'])('rejects annualVolume %j as INVALID_VOLUME', (bad) => {
     expectIssue(() => calculateCosting(withInput(REFERENCE_INPUT, { annualVolume: bad })), 'INVALID_VOLUME', 'annualVolume');
   });
+
+  it('accepts Number.MAX_SAFE_INTEGER as annual volume', () => {
+    expect(() => validateCostingInput(withInput(REFERENCE_INPUT, { annualVolume: Number.MAX_SAFE_INTEGER }))).not.toThrow();
+  });
+
+  it('rejects Number.MAX_SAFE_INTEGER + 1 as INVALID_VOLUME (unsafe integer)', () => {
+    expectIssue(
+      () => calculateCosting(withInput(REFERENCE_INPUT, { annualVolume: Number.MAX_SAFE_INTEGER + 1 })),
+      'INVALID_VOLUME',
+      'annualVolume',
+    );
+  });
+
+  it('rejects fractional volume 100.5 as INVALID_VOLUME', () => {
+    expectIssue(
+      () => calculateCosting(withInput(REFERENCE_INPUT, { annualVolume: 100.5 })),
+      'INVALID_VOLUME',
+      'annualVolume',
+    );
+  });
 });
 
 describe('All problems are reported together', () => {
