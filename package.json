@@ -1,0 +1,27 @@
+{
+  "name": "rfq-to-quote",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client",
+    "shared",
+    "packages/costing-engine"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=server && npm run build --workspace=client",
+    "seed": "npm run seed --workspace=server",
+    "test:engine": "npm run test --workspace=packages/costing-engine",
+    "typecheck": "npm run typecheck --workspace=server && npm run typecheck --workspace=client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  }
+}
