@@ -1,461 +1,245 @@
-/**
- * Costing Engine — TDD Test Suite
- *
- * These tests are written BEFORE the engine is implemented.
- * All tests MUST FAIL until engine.ts is fully implemented.
- *
- * Run: npm run test --workspace=packages/costing-engine
- */
-
 import { describe, it, expect } from 'vitest';
-import { calculateCost } from '../src/index.js';
-import type { CostingEngineInput } from '../src/index.js';
-import { CostingError } from '../src/index.js';
+import { calculateCosting, CostingError } from '../src';
+import type { CostingInput, CostingResult } from '../src';
+import { REFERENCE_INPUT, SETUP_INPUT, withInput } from './fixtures';
 
-// ---------------------------------------------------------------------------
-// Shared fixtures
-// ---------------------------------------------------------------------------
+const MONEY = /^\d+\.\d{2}$/;
 
-const BASE_INPUT: CostingEngineInput = {
-  materialRatePerKg: 85,
-  materialGradeCode: 'MS',
-  weightKg: 1.2,
-  scrapRatePercent: 5,
-  processes: [
-    { processCode: 'TURNING', processName: 'Turning', ratePerHour: 450, cycleTimeSeconds: 60 },
-    { processCode: 'MILLING', processName: 'Milling', ratePerHour: 300, cycleTimeSeconds: 30 },
-  ],
-  overheadRatePercent: 25,
-  setupCostTotal: 50000,
-  annualVolumes: [{ volume: 10000, tierLabel: 'Standard' }],
-  packagingCostPerPiece: 2,
-  freightCostPerPiece: 1.5,
-  targetMarginPercent: 15,
-  gstRatePercent: 18,
-  approvalThreshold: 200,
-};
+function moneyFields(result: CostingResult): string[] {
+  const { breakdown, volumeTiers } = result;
+  return [
+    ...Object.values(breakdown),
+    ...volumeTiers.flatMap((t) => [
+      t.setupAllocationPerPiece,
+      t.totalCostPerPiece,
+      t.sellingPriceExGst,
+      t.gstAmount,
+      t.sellingPriceIncludingGst,
+    ]),
+    result.annualQuotationValue,
+  ];
+}
 
-// ---------------------------------------------------------------------------
-// Test 1: Worked example — verify every intermediate value and final result
-// ---------------------------------------------------------------------------
-describe('Test 1: Worked example with known expected values', () => {
-  it('calculates materialCostPerPiece correctly', () => {
-    // 85 * 1.2 * (1 + 5/100) = 85 * 1.2 * 1.05 = 107.1
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    expect(tier.materialCostPerPiece).toBeCloseTo(107.1, 4);
+describe('Reference test: client brief worked example (Rear wheel spindle)', () => {
+  const result = calculateCosting(REFERENCE_INPUT);
+  const b = result.breakdown;
+
+  it('Material = ₹42.70', () => expect(b.materialCost).toBe('42.70'));
+  it('Scrap = ₹1.71 (1.708)', () => expect(b.scrapCost).toBe('1.71'));
+  it('Conversion = ₹45.33', () => expect(b.conversionCost).toBe('45.33'));
+  it('Overhead = ₹7.18 (7.1793)', () => expect(b.overheadCost).toBe('7.18'));
+  it('Packing/freight = ₹2.50', () => expect(b.packingFreight).toBe('2.50'));
+  it('Base manufacturing cost = ₹96.92', () => expect(b.baseManufacturingCost).toBe('96.92'));
+  it('Setup allocation = ₹0.00 (setup is zero)', () => expect(b.setupAllocationPerPiece).toBe('0.00'));
+  it('Total cost = ₹99.42', () => expect(b.totalCost).toBe('99.42'));
+  it('Selling price ex GST ≈ ₹111.35 (99.4206 × 1.12 = 111.3511)', () => {
+    expect(b.sellingPriceExGst).toBe('111.35');
   });
-
-  it('calculates conversionCostPerPiece correctly', () => {
-    // 450 * 60/3600 + 300 * 30/3600 = 7.5 + 2.5 = 10
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    expect(tier.conversionCostPerPiece).toBeCloseTo(10, 4);
+  it('GST @18% is calculated separately on the selling price (₹20.04)', () => {
+    expect(b.gstAmount).toBe('20.04');
+    expect(b.sellingPriceIncludingGst).toBe('131.39');
   });
-
-  it('calculates overheadCostPerPiece correctly', () => {
-    // 10 * 25/100 = 2.5
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    expect(tier.overheadCostPerPiece).toBeCloseTo(2.5, 4);
-  });
-
-  it('calculates setupCostPerPiece correctly', () => {
-    // 50000 / 10000 = 5
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    expect(tier.setupCostPerPiece).toBeCloseTo(5, 4);
-  });
-
-  it('calculates totalManufacturingCost correctly', () => {
-    // 107.1 + 10 + 2.5 + 5 = 124.6
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    expect(tier.totalManufacturingCost).toBeCloseTo(124.6, 4);
-  });
-
-  it('calculates totalCostPerPiece correctly', () => {
-    // 124.6 + 2 + 1.5 = 128.1
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    expect(tier.totalCostPerPiece).toBeCloseTo(128.1, 4);
-  });
-
-  it('calculates sellingPricePerPiece correctly', () => {
-    // 128.1 / (1 - 0.15) = 128.1 / 0.85 = 150.70588...
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    expect(tier.sellingPricePerPiece).toBeCloseTo(150.7059, 4);
-  });
-
-  it('calculates gstAmount correctly', () => {
-    // 150.70588... * 0.18 = 27.12706...
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    const expectedGst = 150.705882 * 0.18;
-    expect(tier.gstAmount).toBeCloseTo(expectedGst, 4);
-  });
-
-  it('calculates annualValue correctly', () => {
-    // 150.70588... * 10000 = 1507058.8...
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    expect(tier.annualValue).toBeCloseTo(150.705882 * 10000, 2);
-  });
-
-  it('returns correct totalAnnualValue (sum of all tiers)', () => {
-    const result = calculateCost(BASE_INPUT);
-    const sumTiers = result.volumeTiers.reduce((acc, t) => acc + t.annualValue, 0);
-    expect(result.totalAnnualValue).toBeCloseTo(sumTiers, 4);
-  });
-
-  it('preserves tier label in output', () => {
-    const result = calculateCost(BASE_INPUT);
-    expect(result.volumeTiers[0].tierLabel).toBe('Standard');
+  it('Annual quotation value = 111.35 × 180,000 = ₹2,00,43,000.00', () => {
+    expect(result.annualQuotationValue).toBe('20043000.00');
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test 2: Zero setup cost
-// ---------------------------------------------------------------------------
-describe('Test 2: Zero setup cost', () => {
-  it('handles zero setupCostTotal gracefully (setupCostPerPiece = 0)', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, setupCostTotal: 0 };
-    const result = calculateCost(input);
-    expect(result.volumeTiers[0].setupCostPerPiece).toBeCloseTo(0, 4);
-  });
-
-  it('calculates totalManufacturingCost correctly with zero setup', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, setupCostTotal: 0 };
-    const result = calculateCost(input);
-    const tier = result.volumeTiers[0];
-    // 107.1 + 10 + 2.5 + 0 = 119.6
-    expect(tier.totalManufacturingCost).toBeCloseTo(119.6, 4);
+describe('Zero setup cost', () => {
+  it('every tier has zero setup allocation and identical per-piece cost', () => {
+    const { volumeTiers } = calculateCosting(REFERENCE_INPUT);
+    for (const t of volumeTiers) {
+      expect(t.setupAllocationPerPiece).toBe('0.00');
+      expect(t.totalCostPerPiece).toBe('99.42');
+      expect(t.sellingPriceExGst).toBe('111.35');
+    }
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test 3: Multiple volume tiers
-// ---------------------------------------------------------------------------
-describe('Test 3: Multiple volume tiers', () => {
-  const multiTierInput: CostingEngineInput = {
-    ...BASE_INPUT,
-    annualVolumes: [
-      { volume: 1000, tierLabel: 'Low' },
-      { volume: 10000, tierLabel: 'Medium' },
-      { volume: 50000, tierLabel: 'High' },
-    ],
+describe('Three volume tiers (non-zero setup ₹50,000, annual volume 10,000)', () => {
+  const result = calculateCosting(SETUP_INPUT);
+  const [low, base, high] = result.volumeTiers;
+
+  it('returns exactly three tiers named Low / Base / High at 50 / 100 / 150 %', () => {
+    expect(result.volumeTiers.map((t) => [t.tierName, t.tierPercentage])).toEqual([
+      ['Low', 50],
+      ['Base', 100],
+      ['High', 150],
+    ]);
+  });
+
+  it('tier volumes are 5,000 / 10,000 / 15,000', () => {
+    expect([low.tierVolume, base.tierVolume, high.tierVolume]).toEqual([5000, 10000, 15000]);
+  });
+
+  it('setup allocation per piece = setup / tier volume (10.00 / 5.00 / 3.33)', () => {
+    expect([low.setupAllocationPerPiece, base.setupAllocationPerPiece, high.setupAllocationPerPiece]).toEqual([
+      '10.00',
+      '5.00',
+      '3.33',
+    ]);
+  });
+
+  it('tier cost per piece = components + packing + setup allocation', () => {
+    // 146.375 + 3.5 = 149.875 ; + 10 = 159.875 ; + 5 = 154.875 ; + 3.3333… = 153.2083…
+    expect([low.totalCostPerPiece, base.totalCostPerPiece, high.totalCostPerPiece]).toEqual([
+      '159.88',
+      '154.88',
+      '153.21',
+    ]);
+  });
+
+  it('tier selling price = tier cost × (1 + 15%), same margin for all tiers', () => {
+    // 159.875×1.15 = 183.85625 ; 154.875×1.15 = 178.10625 ; 153.2083…×1.15 = 176.1895…
+    expect([low.sellingPriceExGst, base.sellingPriceExGst, high.sellingPriceExGst]).toEqual([
+      '183.86',
+      '178.11',
+      '176.19',
+    ]);
+  });
+
+  it('GST is separate and computed from the rounded selling price', () => {
+    // 183.86×18% = 33.0948 ; 178.11×18% = 32.0598 ; 176.19×18% = 31.7142
+    expect([low.gstAmount, base.gstAmount, high.gstAmount]).toEqual(['33.09', '32.06', '31.71']);
+    expect([low.sellingPriceIncludingGst, base.sellingPriceIncludingGst, high.sellingPriceIncludingGst]).toEqual([
+      '216.95',
+      '210.17',
+      '207.90',
+    ]);
+  });
+
+  it('per-piece cost falls as volume rises', () => {
+    expect(Number(low.totalCostPerPiece)).toBeGreaterThan(Number(base.totalCostPerPiece));
+    expect(Number(base.totalCostPerPiece)).toBeGreaterThan(Number(high.totalCostPerPiece));
+  });
+
+  it('breakdown equals the 100% tier (no second copy of the formulas)', () => {
+    expect(result.breakdown.totalCost).toBe(base.totalCostPerPiece);
+    expect(result.breakdown.sellingPriceExGst).toBe(base.sellingPriceExGst);
+    expect(result.breakdown.gstAmount).toBe(base.gstAmount);
+    expect(result.breakdown.sellingPriceIncludingGst).toBe(base.sellingPriceIncludingGst);
+    expect(result.breakdown.setupAllocationPerPiece).toBe(base.setupAllocationPerPiece);
+  });
+
+  it('breakdown components are rounded half-up for display (29.275 → 29.28, 146.375 → 146.38)', () => {
+    expect(result.breakdown.materialCost).toBe('102.00');
+    expect(result.breakdown.scrapCost).toBe('5.10');
+    expect(result.breakdown.conversionCost).toBe('10.00');
+    expect(result.breakdown.overheadCost).toBe('29.28');
+    expect(result.breakdown.baseManufacturingCost).toBe('146.38');
+  });
+});
+
+describe('Annual value uses the 100% tier only', () => {
+  it('= base-tier selling price × annual volume (178.11 × 10,000)', () => {
+    expect(calculateCosting(SETUP_INPUT).annualQuotationValue).toBe('1781100.00');
+  });
+
+  it('is unaffected by the 50% / 150% tiers', () => {
+    const r = calculateCosting(SETUP_INPUT);
+    const base = r.volumeTiers[1];
+    expect(r.annualQuotationValue).toBe((Number(base.sellingPriceExGst) * 10000).toFixed(2));
+  });
+});
+
+describe('Fractional tier volumes', () => {
+  it('annual 101 → 50.5 → 51, 101, 151.5 → 152 (half-up, whole pieces)', () => {
+    const r = calculateCosting(withInput(SETUP_INPUT, { annualVolume: 101 }));
+    expect(r.volumeTiers.map((t) => t.tierVolume)).toEqual([51, 101, 152]);
+  });
+});
+
+describe('Rounding policy', () => {
+  const tiny: CostingInput = {
+    grossWeightKg: 1,
+    materialRatePerKg: '0.125',
+    scrapPct: 0,
+    routingOperations: [{ operationName: 'Op', machine: 'M', cycleTimeMinutes: 1, machineHourRate: 0 }],
+    overheadPct: 0,
+    packingFreightPerPiece: 0,
+    setupCostPerPart: 0,
+    annualVolume: 1000,
+    defaultMarginPct: 0,
+    gstPct: 0,
   };
 
-  it('returns a result for each volume tier', () => {
-    const result = calculateCost(multiTierInput);
-    expect(result.volumeTiers).toHaveLength(3);
+  it('rounds half UP at 2 dp: 0.125 → 0.13 (banker\'s rounding would give 0.12)', () => {
+    const r = calculateCosting(tiny);
+    expect(r.breakdown.materialCost).toBe('0.13');
+    expect(r.breakdown.totalCost).toBe('0.13');
   });
 
-  it('setupCostPerPiece is higher for lower volume tiers', () => {
-    const result = calculateCost(multiTierInput);
-    const low = result.volumeTiers[0].setupCostPerPiece;    // 50000/1000  = 50
-    const med = result.volumeTiers[1].setupCostPerPiece;    // 50000/10000 = 5
-    const high = result.volumeTiers[2].setupCostPerPiece;   // 50000/50000 = 1
-    expect(low).toBeCloseTo(50, 4);
-    expect(med).toBeCloseTo(5, 4);
-    expect(high).toBeCloseTo(1, 4);
-    expect(low).toBeGreaterThan(med);
-    expect(med).toBeGreaterThan(high);
+  it('zero margin → selling price equals cost; zero GST → GST 0.00 and inclusive = exclusive', () => {
+    const r = calculateCosting(tiny);
+    expect(r.breakdown.sellingPriceExGst).toBe(r.breakdown.totalCost);
+    expect(r.breakdown.gstAmount).toBe('0.00');
+    expect(r.breakdown.sellingPriceIncludingGst).toBe(r.breakdown.sellingPriceExGst);
   });
 
-  it('totalCostPerPiece decreases as volume increases (due to lower setup amortization)', () => {
-    const result = calculateCost(multiTierInput);
-    const costs = result.volumeTiers.map((t) => t.totalCostPerPiece);
-    expect(costs[0]).toBeGreaterThan(costs[1]);
-    expect(costs[1]).toBeGreaterThan(costs[2]);
+  it('GST at 28%: 111.35 × 28% = 31.178 → 31.18 ; inclusive 142.53', () => {
+    const r = calculateCosting(withInput(REFERENCE_INPUT, { gstPct: 28 }));
+    expect(r.breakdown.gstAmount).toBe('31.18');
+    expect(r.breakdown.sellingPriceIncludingGst).toBe('142.53');
   });
 
-  it('totalAnnualValue equals sum of all tier annual values', () => {
-    const result = calculateCost(multiTierInput);
-    const sum = result.volumeTiers.reduce((acc, t) => acc + t.annualValue, 0);
-    expect(result.totalAnnualValue).toBeCloseTo(sum, 4);
-  });
-
-  it('each tier has correct volume field', () => {
-    const result = calculateCost(multiTierInput);
-    expect(result.volumeTiers[0].volume).toBe(1000);
-    expect(result.volumeTiers[1].volume).toBe(10000);
-    expect(result.volumeTiers[2].volume).toBe(50000);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 4: Missing / zero material rate throws structured error
-// ---------------------------------------------------------------------------
-describe('Test 4: Missing or zero material rate throws structured CostingError', () => {
-  it('throws CostingError with code MISSING_RATE when materialRatePerKg is 0', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, materialRatePerKg: 0 };
-    expect(() => calculateCost(input)).toThrow(CostingError);
-    try {
-      calculateCost(input);
-    } catch (e) {
-      expect(e).toBeInstanceOf(CostingError);
-      expect((e as CostingError).code).toBe('MISSING_RATE');
-    }
-  });
-
-  it('throws CostingError with code MISSING_RATE when materialRatePerKg is negative', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, materialRatePerKg: -10 };
-    expect(() => calculateCost(input)).toThrow(CostingError);
-    try {
-      calculateCost(input);
-    } catch (e) {
-      expect((e as CostingError).code).toBe('MISSING_RATE');
-    }
-  });
-
-  it('throws CostingError with code MISSING_RATE when a process ratePerHour is 0', () => {
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      processes: [
-        { processCode: 'TURNING', processName: 'Turning', ratePerHour: 0, cycleTimeSeconds: 60 },
-      ],
-    };
-    expect(() => calculateCost(input)).toThrow(CostingError);
-    try {
-      calculateCost(input);
-    } catch (e) {
-      expect((e as CostingError).code).toBe('MISSING_RATE');
+  it('exclusive + GST always equals inclusive to the paisa (all tiers)', () => {
+    for (const input of [REFERENCE_INPUT, SETUP_INPUT, withInput(SETUP_INPUT, { gstPct: 12.5, annualVolume: 777 })]) {
+      for (const t of calculateCosting(input).volumeTiers) {
+        const sum = (Math.round(Number(t.sellingPriceExGst) * 100) + Math.round(Number(t.gstAmount) * 100)) / 100;
+        expect(t.sellingPriceIncludingGst).toBe(sum.toFixed(2));
+      }
     }
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test 5: Zero volume throws error
-// ---------------------------------------------------------------------------
-describe('Test 5: Zero volume throws CostingError', () => {
-  it('throws CostingError with code INVALID_VOLUME when volume is 0', () => {
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      annualVolumes: [{ volume: 0, tierLabel: 'Zero' }],
-    };
-    expect(() => calculateCost(input)).toThrow(CostingError);
-    try {
-      calculateCost(input);
-    } catch (e) {
-      expect(e).toBeInstanceOf(CostingError);
-      expect((e as CostingError).code).toBe('INVALID_VOLUME');
+describe('Output contract', () => {
+  it('every monetary output is a fixed 2-dp string, never a number or Decimal', () => {
+    for (const input of [REFERENCE_INPUT, SETUP_INPUT]) {
+      for (const m of moneyFields(calculateCosting(input))) {
+        expect(typeof m).toBe('string');
+        expect(m).toMatch(MONEY);
+      }
     }
   });
 
-  it('throws CostingError when annualVolumes array is empty', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, annualVolumes: [] };
-    expect(() => calculateCost(input)).toThrow(CostingError);
+  it('survives a JSON round trip unchanged (serialisable at the module boundary)', () => {
+    const r = calculateCosting(SETUP_INPUT);
+    expect(JSON.parse(JSON.stringify(r))).toEqual(r);
+  });
+
+  it('is deterministic and does not mutate its input', () => {
+    const input = structuredClone(SETUP_INPUT);
+    const frozen = JSON.stringify(input);
+    const a = calculateCosting(input);
+    const b = calculateCosting(input);
+    expect(a).toEqual(b);
+    expect(JSON.stringify(input)).toBe(frozen);
+  });
+
+  it('accepts the same values as strings or numbers with identical results', () => {
+    const asStrings: CostingInput = {
+      grossWeightKg: '0.61',
+      materialRatePerKg: '70',
+      scrapPct: '4',
+      routingOperations: [{ operationName: 'Turning', machine: 'CNC Turning', cycleTimeMinutes: '3.2', machineHourRate: '850' }],
+      overheadPct: '8',
+      packingFreightPerPiece: '2.50',
+      setupCostPerPart: '0',
+      annualVolume: 180000,
+      defaultMarginPct: '12',
+      gstPct: '18',
+    };
+    expect(calculateCosting(asStrings)).toEqual(calculateCosting(REFERENCE_INPUT));
+  });
+});
+
+describe('Invalid volumes never produce a result', () => {
+  it.each([0, -1, -180000])('annualVolume %d is rejected with INVALID_VOLUME', (v) => {
+    expect(() => calculateCosting(withInput(REFERENCE_INPUT, { annualVolume: v }))).toThrow(CostingError);
     try {
-      calculateCost(input);
+      calculateCosting(withInput(REFERENCE_INPUT, { annualVolume: v }));
     } catch (e) {
-      expect(e).toBeInstanceOf(CostingError);
       expect((e as CostingError).code).toBe('INVALID_VOLUME');
     }
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test 6: Negative volume throws error
-// ---------------------------------------------------------------------------
-describe('Test 6: Negative volume throws CostingError', () => {
-  it('throws CostingError with code INVALID_VOLUME when volume is negative', () => {
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      annualVolumes: [{ volume: -500, tierLabel: 'Negative' }],
-    };
-    expect(() => calculateCost(input)).toThrow(CostingError);
-    try {
-      calculateCost(input);
-    } catch (e) {
-      expect(e).toBeInstanceOf(CostingError);
-      expect((e as CostingError).code).toBe('INVALID_VOLUME');
-    }
-  });
-
-  it('throws for mixed valid and negative volumes', () => {
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      annualVolumes: [
-        { volume: 1000, tierLabel: 'Valid' },
-        { volume: -100, tierLabel: 'Invalid' },
-      ],
-    };
-    expect(() => calculateCost(input)).toThrow(CostingError);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 7: Decimal precision
-// ---------------------------------------------------------------------------
-describe('Test 7: Decimal precision — results correct to 4 decimal places', () => {
-  it('handles non-integer rates and weights without floating point drift', () => {
-    // Using a rate that would cause classic JS floating-point issues
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      materialRatePerKg: 185.75,
-      weightKg: 0.333,
-      scrapRatePercent: 7.5,
-    };
-    const result = calculateCost(input);
-    const tier = result.volumeTiers[0];
-
-    // Expected: 185.75 * 0.333 * 1.075 = 185.75 * 0.333 * 1.075
-    const expected = 185.75 * 0.333 * 1.075;
-    expect(tier.materialCostPerPiece).toBeCloseTo(expected, 4);
-  });
-
-  it('handles 1/3 cycle time without infinite precision loss', () => {
-    // 1 hour = 3600 sec; 1200 sec = 1/3 hour → rate * 1/3
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      processes: [
-        { processCode: 'TURNING', processName: 'Turning', ratePerHour: 450, cycleTimeSeconds: 1200 },
-      ],
-    };
-    const result = calculateCost(input);
-    // 450 * 1200/3600 = 450 * 1/3 = 150
-    expect(result.volumeTiers[0].conversionCostPerPiece).toBeCloseTo(150, 4);
-  });
-
-  it('sellingPrice is computed with >= 4 decimal place precision', () => {
-    const result = calculateCost(BASE_INPUT);
-    const tier = result.volumeTiers[0];
-    // 128.1 / 0.85 = 150.70588235294...
-    // The 4th decimal place is 5 (150.7059)
-    const diff = Math.abs(tier.sellingPricePerPiece - 150.70588235294117);
-    expect(diff).toBeLessThan(0.0001);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 8: Approval threshold exceeded
-// ---------------------------------------------------------------------------
-describe('Test 8: Approval threshold — exceeded', () => {
-  it('sets requiresApproval=true when any tier totalCostPerPiece > approvalThreshold', () => {
-    // BASE_INPUT totalCostPerPiece = 128.1, threshold = 200 → NOT exceeded
-    // Set a low threshold so it IS exceeded
-    const input: CostingEngineInput = { ...BASE_INPUT, approvalThreshold: 100 };
-    const result = calculateCost(input);
-    expect(result.requiresApproval).toBe(true);
-  });
-
-  it('reports the approvalThreshold in output', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, approvalThreshold: 100 };
-    const result = calculateCost(input);
-    expect(result.approvalThreshold).toBe(100);
-  });
-
-  it('requires approval when high-volume tier has high total cost', () => {
-    // Low volume means high setup amortization → higher cost per piece
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      setupCostTotal: 1_000_000,
-      annualVolumes: [{ volume: 100, tierLabel: 'VeryLow' }],
-      approvalThreshold: 500,
-    };
-    const result = calculateCost(input);
-    // setupCostPerPiece = 1,000,000 / 100 = 10,000 → totalCostPerPiece >> 500
-    expect(result.requiresApproval).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 9: Approval threshold NOT exceeded
-// ---------------------------------------------------------------------------
-describe('Test 9: Approval threshold — not exceeded', () => {
-  it('sets requiresApproval=false when all tiers totalCostPerPiece <= approvalThreshold', () => {
-    // BASE_INPUT totalCostPerPiece = 128.1, threshold = 200 → NOT exceeded
-    const result = calculateCost(BASE_INPUT);
-    expect(result.requiresApproval).toBe(false);
-  });
-
-  it('sets requiresApproval=false when approvalThreshold is not provided', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, approvalThreshold: undefined };
-    const result = calculateCost(input);
-    expect(result.requiresApproval).toBe(false);
-  });
-
-  it('sets requiresApproval=false when totalCostPerPiece exactly equals threshold', () => {
-    // totalCostPerPiece = 128.1; threshold = 128.1 → boundary: NOT exceeded (> not >=)
-    const input: CostingEngineInput = { ...BASE_INPUT, approvalThreshold: 128.1 };
-    const result = calculateCost(input);
-    expect(result.requiresApproval).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 10: No margin provided — sellingPrice equals totalCostPerPiece
-// ---------------------------------------------------------------------------
-describe('Test 10: No margin — sellingPrice equals totalCostPerPiece', () => {
-  it('sets sellingPricePerPiece = totalCostPerPiece when targetMarginPercent is undefined', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, targetMarginPercent: undefined };
-    const result = calculateCost(input);
-    const tier = result.volumeTiers[0];
-    expect(tier.sellingPricePerPiece).toBeCloseTo(tier.totalCostPerPiece, 4);
-  });
-
-  it('sets sellingPricePerPiece = totalCostPerPiece when targetMarginPercent is 0', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, targetMarginPercent: 0 };
-    const result = calculateCost(input);
-    const tier = result.volumeTiers[0];
-    expect(tier.sellingPricePerPiece).toBeCloseTo(tier.totalCostPerPiece, 4);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 11: GST at 0% and 28%
-// ---------------------------------------------------------------------------
-describe('Test 11: GST edge cases', () => {
-  it('gstAmount is 0 when gstRatePercent is 0', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, gstRatePercent: 0 };
-    const result = calculateCost(input);
-    expect(result.volumeTiers[0].gstAmount).toBeCloseTo(0, 4);
-  });
-
-  it('calculates gstAmount correctly at 28%', () => {
-    const input: CostingEngineInput = { ...BASE_INPUT, gstRatePercent: 28 };
-    const result = calculateCost(input);
-    const tier = result.volumeTiers[0];
-    const expectedGst = tier.sellingPricePerPiece * 0.28;
-    expect(tier.gstAmount).toBeCloseTo(expectedGst, 4);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 12: Single process
-// ---------------------------------------------------------------------------
-describe('Test 12: Single process input', () => {
-  it('calculates conversionCost for a single process correctly', () => {
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      processes: [
-        { processCode: 'TURNING', processName: 'Turning', ratePerHour: 600, cycleTimeSeconds: 120 },
-      ],
-    };
-    const result = calculateCost(input);
-    // 600 * 120/3600 = 600 * 1/30 = 20
-    expect(result.volumeTiers[0].conversionCostPerPiece).toBeCloseTo(20, 4);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 13: annualValue is sellingPricePerPiece * volume per tier
-// ---------------------------------------------------------------------------
-describe('Test 13: annualValue per tier', () => {
-  it('annualValue = sellingPricePerPiece * volume for each tier', () => {
-    const input: CostingEngineInput = {
-      ...BASE_INPUT,
-      annualVolumes: [
-        { volume: 500, tierLabel: 'T1' },
-        { volume: 2000, tierLabel: 'T2' },
-      ],
-    };
-    const result = calculateCost(input);
-    for (const tier of result.volumeTiers) {
-      const expected = tier.sellingPricePerPiece * tier.volume;
-      expect(tier.annualValue).toBeCloseTo(expected, 4);
-    }
-  });
-});

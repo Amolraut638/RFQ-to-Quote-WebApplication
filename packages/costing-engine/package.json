@@ -5,7 +5,8 @@
   "main": "./src/index.ts",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "decimal.js": "^10.4.3"
