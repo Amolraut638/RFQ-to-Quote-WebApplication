@@ -253,3 +253,49 @@ describe('getRateSetting', () => {
   });
 });
 
+// ─── Invalid costing date tests ───────────────────────────────────────────────
+
+describe('Invalid costingDate validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const invalidDates = [null, undefined, 'not-a-date', 42, {}, new Date('invalid')];
+
+  describe('getMaterialRate', () => {
+    it.each(invalidDates)('rejects costingDate %j with INVALID_COSTING_DATE', async (bad) => {
+      const err = await getMaterialRate('EN8', bad as Date).catch((e) => e as RateLookupError);
+      expect(err).toBeInstanceOf(RateLookupError);
+      expect(err.code).toBe('INVALID_COSTING_DATE');
+      // DB must NOT be queried when date is invalid
+      expect(MaterialRate.findOne).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getMachineRate', () => {
+    it.each(invalidDates)('rejects costingDate %j with INVALID_COSTING_DATE', async (bad) => {
+      const err = await getMachineRate('CNC Turning', bad as Date).catch((e) => e as RateLookupError);
+      expect(err).toBeInstanceOf(RateLookupError);
+      expect(err.code).toBe('INVALID_COSTING_DATE');
+      expect(MachineRate.findOne).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getRateSetting', () => {
+    it.each(invalidDates)('rejects costingDate %j with INVALID_COSTING_DATE', async (bad) => {
+      const err = await getRateSetting(bad as Date).catch((e) => e as RateLookupError);
+      expect(err).toBeInstanceOf(RateLookupError);
+      expect(err.code).toBe('INVALID_COSTING_DATE');
+      expect(RateSetting.findOne).not.toHaveBeenCalled();
+    });
+  });
+
+  it('a valid Date passes validation and proceeds to DB query', async () => {
+    (MaterialRate.findOne as ReturnType<typeof vi.fn>).mockReturnValue(chainResolving(null));
+    // Valid date — should reach DB (no INVALID_COSTING_DATE error)
+    const err = await getMaterialRate('EN8', new Date('2025-01-01')).catch((e) => e as RateLookupError);
+    expect(err.code).toBe('MATERIAL_RATE_NOT_FOUND'); // correct error — date was valid
+    expect(MaterialRate.findOne).toHaveBeenCalled();
+  });
+});
+

@@ -10,6 +10,7 @@
  *
  * NEVER substitutes a default for a missing rate.
  * Returns a structured error when no applicable record is found.
+ * Rejects invalid dates before hitting the database.
  *
  * These functions are ASYNC and USE Mongoose. They are intentionally
  * separate from the costing engine, which is pure and synchronous.
@@ -25,7 +26,8 @@ import { RateSetting, type IRateSetting } from '../models/RateSetting';
 export type RateLookupErrorCode =
   | 'MATERIAL_RATE_NOT_FOUND'
   | 'MACHINE_RATE_NOT_FOUND'
-  | 'RATE_SETTING_NOT_FOUND';
+  | 'RATE_SETTING_NOT_FOUND'
+  | 'INVALID_COSTING_DATE';
 
 export class RateLookupError extends Error {
   public readonly code: RateLookupErrorCode;
@@ -49,6 +51,35 @@ export function decimal128ToString(d128: mongoose.Types.Decimal128): string {
   return d128.toString();
 }
 
+/**
+ * Validate that `d` is a real Date object with a valid time value.
+ * Throws RateLookupError(INVALID_COSTING_DATE) for null, undefined,
+ * non-Date values, and Invalid Date objects (NaN internal timestamp).
+ */
+function assertValidDate(d: unknown, label: string): asserts d is Date {
+  if (d === null || d === undefined) {
+    throw new RateLookupError(
+      'INVALID_COSTING_DATE',
+      `${label} is required but was ${d === null ? 'null' : 'undefined'}`,
+      { [label]: d },
+    );
+  }
+  if (!(d instanceof Date)) {
+    throw new RateLookupError(
+      'INVALID_COSTING_DATE',
+      `${label} must be a Date instance, got ${typeof d}`,
+      { [label]: d },
+    );
+  }
+  if (isNaN(d.getTime())) {
+    throw new RateLookupError(
+      'INVALID_COSTING_DATE',
+      `${label} is an Invalid Date (NaN timestamp)`,
+      { [label]: String(d) },
+    );
+  }
+}
+
 // ─── Material rate ────────────────────────────────────────────────────────────
 
 /**
@@ -56,12 +87,15 @@ export function decimal128ToString(d128: mongoose.Types.Decimal128): string {
  *
  * @returns The rate record. The caller should use `.ratePerKg.toString()` to
  *          pass the value to the costing engine.
- * @throws  RateLookupError with code MATERIAL_RATE_NOT_FOUND when no record applies.
+ * @throws  RateLookupError(INVALID_COSTING_DATE) for invalid/missing dates.
+ * @throws  RateLookupError(MATERIAL_RATE_NOT_FOUND) when no record applies.
  */
 export async function getMaterialRate(
   material: string,
   costingDate: Date,
 ): Promise<IMaterialRate> {
+  assertValidDate(costingDate, 'costingDate');
+
   const record = await MaterialRate.findOne({
     material,
     effectiveFrom: { $lte: costingDate },
@@ -87,12 +121,15 @@ export async function getMaterialRate(
  *
  * @returns The rate record. The caller should use `.hourRate.toString()` to
  *          pass the value to the costing engine.
- * @throws  RateLookupError with code MACHINE_RATE_NOT_FOUND when no record applies.
+ * @throws  RateLookupError(INVALID_COSTING_DATE) for invalid/missing dates.
+ * @throws  RateLookupError(MACHINE_RATE_NOT_FOUND) when no record applies.
  */
 export async function getMachineRate(
   machine: string,
   costingDate: Date,
 ): Promise<IMachineRate> {
+  assertValidDate(costingDate, 'costingDate');
+
   const record = await MachineRate.findOne({
     machine,
     effectiveFrom: { $lte: costingDate },
@@ -118,9 +155,12 @@ export async function getMachineRate(
  * applicable on `costingDate`.
  *
  * @returns The rate setting document.
- * @throws  RateLookupError with code RATE_SETTING_NOT_FOUND when no record applies.
+ * @throws  RateLookupError(INVALID_COSTING_DATE) for invalid/missing dates.
+ * @throws  RateLookupError(RATE_SETTING_NOT_FOUND) when no record applies.
  */
 export async function getRateSetting(costingDate: Date): Promise<IRateSetting> {
+  assertValidDate(costingDate, 'costingDate');
+
   const record = await RateSetting.findOne({
     effectiveFrom: { $lte: costingDate },
   })
@@ -137,4 +177,3 @@ export async function getRateSetting(costingDate: Date): Promise<IRateSetting> {
 
   return record;
 }
-
