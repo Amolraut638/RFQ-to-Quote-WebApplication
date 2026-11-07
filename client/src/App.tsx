@@ -4,6 +4,8 @@ import { LoginPage } from './pages/LoginPage';
 import { RFQListPage } from './pages/RFQListPage';
 import { RFQDetailPage } from './pages/RFQDetailPage';
 import { ApprovalPage } from './pages/ApprovalPage';
+import { PartCostingPage } from './pages/PartCostingPage';
+import { CostingResultsPage } from './pages/CostingResultsPage';
 
 export default function App() {
   return (
@@ -16,6 +18,8 @@ export default function App() {
         <Route index element={<Navigate to="/rfqs" replace />} />
         <Route path="/rfqs" element={<RFQListPage />} />
         <Route path="/rfqs/:id" element={<RFQDetailPage />} />
+        <Route path="/rfqs/:rfqId/parts/:partId/costing" element={<PartCostingPage />} />
+        <Route path="/rfqs/:rfqId/parts/:partId/results" element={<CostingResultsPage />} />
         <Route path="/approval" element={<ApprovalPage />} />
       </Route>
 
@@ -24,4 +28,3 @@ export default function App() {
     </Routes>
   );
 }
-
