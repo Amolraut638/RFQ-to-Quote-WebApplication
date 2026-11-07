@@ -4,7 +4,7 @@
  * Business logic for creating, revising, and approving quotation versions.
  *
  * Immutability rules (enforced server-side, not just in comments):
- *  - PENDING_APPROVAL, APPROVED, SENT versions may NOT be edited or deleted.
+ *  - PENDING_APPROVAL, APPROVED, READY_FOR_SALES, SENT versions may NOT be edited or deleted.
  *  - A revision always creates a new version document; it never overwrites.
  *  - Approval is associated with a specific rfqId + version pair.
  *  - REJECTED versions remain in history and cannot be deleted.
@@ -30,7 +30,9 @@ import {
   type ICostBreakdownSnapshot,
   type IVolumeTierSnapshot,
 } from '../models/Quote';
+import { QuoteEvent, type IQuoteEvent } from '../models/QuoteEvent';
 import type { CostingInput, CostingResult, VolumeTierOutput, CostingOutput } from '@rfq/costing-engine';
+import { evaluateApproval } from '@rfq/costing-engine';
 
 // ─── Error types ──────────────────────────────────────────────────────────────
 
@@ -217,26 +219,65 @@ export async function reviseQuote(params: ReviseQuoteParams): Promise<IQuote> {
 }
 
 /**
- * Submit a DRAFT quote for approval (DRAFT → PENDING_APPROVAL).
- * Immutable statuses are blocked.
+ * Submit a DRAFT quote for approval.
+ *
+ * Uses the approval threshold from the costing engine:
+ *  - Annual value STRICTLY > ₹25,00,000 → PENDING_APPROVAL (requires Sales Head)
+ *  - Annual value ≤ ₹25,00,000           → READY_FOR_SALES  (no approval needed)
+ *
+ * Records submittedBy/submittedAt and writes a SUBMITTED QuoteEvent.
+ * The submitterId parameter is optional for backward compatibility with
+ * existing tests that call submitForApproval(rfqId, version).
  */
-export async function submitForApproval(rfqId: mongoose.Types.ObjectId, version: number): Promise<IQuote> {
+export async function submitForApproval(
+  rfqId: mongoose.Types.ObjectId,
+  version: number,
+  submitterId?: mongoose.Types.ObjectId,
+): Promise<IQuote> {
   const quote = await Quote.findOne({ rfqId, version });
   if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
 
   assertMutable(quote);
 
   if (quote.status !== 'DRAFT') {
-    throw new QuoteServiceError('INVALID_STATUS_TRANSITION', `Only DRAFT quotes can be submitted for approval; current status: ${quote.status}`);
+    throw new QuoteServiceError(
+      'INVALID_STATUS_TRANSITION',
+      `Only DRAFT quotes can be submitted; current status: ${quote.status}`,
+    );
   }
 
-  quote.status = 'PENDING_APPROVAL';
-  return quote.save();
+  // Determine target status using the costing engine threshold logic
+  const decision = evaluateApproval([quote.annualQuotationValue]);
+  quote.status = decision.requiresApproval ? 'PENDING_APPROVAL' : 'READY_FOR_SALES';
+
+  if (submitterId) {
+    quote.submittedBy = submitterId;
+    quote.submittedAt = new Date();
+  }
+
+  const saved = await quote.save();
+
+  // Write audit event (fire-and-forget — audit failure must not block submission)
+  if (submitterId) {
+    QuoteEvent.create({
+      quoteId: quote._id,
+      rfqId,
+      version: quote.version,
+      action: 'SUBMITTED',
+      actorId: submitterId,
+      timestamp: new Date(),
+    }).catch((err: unknown) => {
+      console.error('[quote.service] Failed to write SUBMITTED QuoteEvent:', err);
+    });
+  }
+
+  return saved;
 }
 
 /**
  * Approve a PENDING_APPROVAL quote (PENDING_APPROVAL → APPROVED).
  * Records the approver and timestamp. Immutable after approval.
+ * Writes an APPROVED QuoteEvent.
  */
 export async function approveQuote(params: ApproveQuoteParams): Promise<IQuote> {
   const { rfqId, version, approverId } = params;
@@ -244,44 +285,126 @@ export async function approveQuote(params: ApproveQuoteParams): Promise<IQuote> 
   if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
 
   if (quote.status !== 'PENDING_APPROVAL') {
-    throw new QuoteServiceError('INVALID_STATUS_TRANSITION', `Only PENDING_APPROVAL quotes can be approved; current status: ${quote.status}`);
+    throw new QuoteServiceError(
+      'INVALID_STATUS_TRANSITION',
+      `Only PENDING_APPROVAL quotes can be approved; current status: ${quote.status}`,
+    );
   }
 
   quote.status = 'APPROVED';
   quote.approverId = approverId;
   quote.approvedAt = new Date();
-  return quote.save();
+  const saved = await quote.save();
+
+  // Write audit event (fire-and-forget — audit failure must not block the approval)
+  QuoteEvent.create({
+    quoteId: quote._id,
+    rfqId,
+    version: quote.version,
+    action: 'APPROVED',
+    actorId: approverId,
+    timestamp: new Date(),
+  }).catch((err: unknown) => {
+    console.error('[quote.service] Failed to write APPROVED QuoteEvent:', err);
+  });
+
+  return saved;
 }
 
 /**
  * Reject a PENDING_APPROVAL quote (PENDING_APPROVAL → REJECTED).
  * Rejected versions remain in history and cannot be deleted.
+ * Writes a REJECTED QuoteEvent with the mandatory comment.
+ *
+ * The rejecterId and comment parameters are optional so that existing tests
+ * that call rejectQuote(rfqId, version) continue to compile and pass.
  */
-export async function rejectQuote(rfqId: mongoose.Types.ObjectId, version: number): Promise<IQuote> {
+export async function rejectQuote(
+  rfqId: mongoose.Types.ObjectId,
+  version: number,
+  rejecterId?: mongoose.Types.ObjectId,
+  comment?: string,
+): Promise<IQuote> {
   const quote = await Quote.findOne({ rfqId, version });
   if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
 
   if (quote.status !== 'PENDING_APPROVAL') {
-    throw new QuoteServiceError('INVALID_STATUS_TRANSITION', `Only PENDING_APPROVAL quotes can be rejected; current status: ${quote.status}`);
+    throw new QuoteServiceError(
+      'INVALID_STATUS_TRANSITION',
+      `Only PENDING_APPROVAL quotes can be rejected; current status: ${quote.status}`,
+    );
   }
 
   quote.status = 'REJECTED';
-  return quote.save();
+  if (rejecterId) {
+    quote.rejectedBy = rejecterId;
+    quote.rejectedAt = new Date();
+  }
+  if (comment) {
+    quote.rejectionComment = comment;
+  }
+
+  const saved = await quote.save();
+
+  if (rejecterId) {
+    QuoteEvent.create({
+      quoteId: quote._id,
+      rfqId,
+      version: quote.version,
+      action: 'REJECTED',
+      actorId: rejecterId,
+      timestamp: new Date(),
+      comment,
+    }).catch((err: unknown) => {
+      console.error('[quote.service] Failed to write REJECTED QuoteEvent:', err);
+    });
+  }
+
+  return saved;
 }
 
 /**
- * Mark an APPROVED quote as SENT (APPROVED → SENT).
+ * Mark an APPROVED or READY_FOR_SALES quote as SENT.
+ * Records sentBy/sentAt and writes a SENT QuoteEvent.
+ * The sentById parameter is optional for backward compatibility.
  */
-export async function markAsSent(rfqId: mongoose.Types.ObjectId, version: number): Promise<IQuote> {
+export async function markAsSent(
+  rfqId: mongoose.Types.ObjectId,
+  version: number,
+  sentById?: mongoose.Types.ObjectId,
+): Promise<IQuote> {
   const quote = await Quote.findOne({ rfqId, version });
   if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
 
-  if (quote.status !== 'APPROVED') {
-    throw new QuoteServiceError('INVALID_STATUS_TRANSITION', `Only APPROVED quotes can be marked as SENT; current status: ${quote.status}`);
+  if (quote.status !== 'APPROVED' && quote.status !== 'READY_FOR_SALES') {
+    throw new QuoteServiceError(
+      'INVALID_STATUS_TRANSITION',
+      `Only APPROVED or READY_FOR_SALES quotes can be marked as SENT; current status: ${quote.status}`,
+    );
   }
 
   quote.status = 'SENT';
-  return quote.save();
+  if (sentById) {
+    quote.sentBy = sentById;
+    quote.sentAt = new Date();
+  }
+
+  const saved = await quote.save();
+
+  if (sentById) {
+    QuoteEvent.create({
+      quoteId: quote._id,
+      rfqId,
+      version: quote.version,
+      action: 'SENT',
+      actorId: sentById,
+      timestamp: new Date(),
+    }).catch((err: unknown) => {
+      console.error('[quote.service] Failed to write SENT QuoteEvent:', err);
+    });
+  }
+
+  return saved;
 }
 
 /**
@@ -298,3 +421,35 @@ export async function getQuoteVersion(rfqId: mongoose.Types.ObjectId, version: n
   return Quote.findOne({ rfqId, version });
 }
 
+/**
+ * Retrieve all quotes with status PENDING_APPROVAL, with RFQ and estimator info populated.
+ * Used by the Sales Head approval dashboard.
+ */
+export async function getPendingApprovals(): Promise<IQuote[]> {
+  return Quote.find({ status: 'PENDING_APPROVAL' })
+    .populate('rfqId', 'rfqNo customer dueDate')
+    .populate('createdBy', 'name email')
+    .sort({ createdAt: -1 });
+}
+
+/**
+ * Retrieve a specific quote by its _id, with related documents populated.
+ * Used by the approval review page.
+ */
+export async function getQuoteById(quoteId: mongoose.Types.ObjectId): Promise<IQuote | null> {
+  return Quote.findById(quoteId)
+    .populate('rfqId', 'rfqNo customer dueDate')
+    .populate('createdBy', 'name email')
+    .populate('approverId', 'name email')
+    .populate('rejectedBy', 'name email');
+}
+
+/**
+ * Retrieve the audit trail for a specific quote, ordered chronologically.
+ * Used by the quote review page.
+ */
+export async function getQuoteEvents(quoteId: mongoose.Types.ObjectId): Promise<IQuoteEvent[]> {
+  return QuoteEvent.find({ quoteId })
+    .populate('actorId', 'name email role')
+    .sort({ timestamp: 1 });
+}

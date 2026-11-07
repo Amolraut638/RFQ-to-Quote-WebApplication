@@ -21,12 +21,19 @@
 
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type QuoteStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'SENT';
+export type QuoteStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'READY_FOR_SALES'
+  | 'SENT';
 
 /** Statuses that lock a quote version against any further editing. */
 export const IMMUTABLE_STATUSES: readonly QuoteStatus[] = [
   'PENDING_APPROVAL',
   'APPROVED',
+  'READY_FOR_SALES',
   'SENT',
 ];
 
@@ -146,6 +153,16 @@ export interface IQuote extends Document {
   createdBy: mongoose.Types.ObjectId;
   approverId?: mongoose.Types.ObjectId;
   approvedAt?: Date;
+  /** Which part was costed — optional for backward compat with pre-Day4 quotes. */
+  partId?: mongoose.Types.ObjectId;
+  submittedBy?: mongoose.Types.ObjectId;
+  submittedAt?: Date;
+  rejectedBy?: mongoose.Types.ObjectId;
+  rejectedAt?: Date;
+  /** Mandatory comment when rejecting. Stored once, never modified. */
+  rejectionComment?: string;
+  sentBy?: mongoose.Types.ObjectId;
+  sentAt?: Date;
   /** Frozen rate snapshot — set once at creation, never mutated. */
   rateSnapshot: IRateSnapshot;
   /** Verbatim costing inputs — preserved for auditability. */
@@ -252,7 +269,7 @@ const QuoteSchema = new Schema<IQuote>(
     version: { type: Number, required: true, min: 1 },
     status: {
       type: String,
-      enum: ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'SENT'] as QuoteStatus[],
+      enum: ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'READY_FOR_SALES', 'SENT'] as QuoteStatus[],
       default: 'DRAFT',
     },
     totalAnnualValue: { type: mongoose.Schema.Types.Decimal128 },
@@ -260,6 +277,14 @@ const QuoteSchema = new Schema<IQuote>(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     approverId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     approvedAt: { type: Date },
+    partId: { type: mongoose.Schema.Types.ObjectId, ref: 'Part' },
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    submittedAt: { type: Date },
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    rejectedAt: { type: Date },
+    rejectionComment: { type: String },
+    sentBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    sentAt: { type: Date },
     rateSnapshot: { type: RateSnapshotSchema, required: true },
     costingInputSnapshot: { type: CostingInputSnapshotSchema, required: true },
     costBreakdown: { type: CostBreakdownSnapshotSchema, required: true },
