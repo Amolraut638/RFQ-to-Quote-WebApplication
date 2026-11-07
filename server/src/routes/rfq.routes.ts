@@ -10,6 +10,9 @@ import {
   saveQuoteHandler,
   listQuotesHandler,
   getQuoteHandler,
+  submitQuoteHandler,
+  markSentHandler,
+  downloadQuotePdfHandler,
 } from '../controllers/costing.controller';
 import { authenticate } from '../middleware/authenticate';
 import { authorizeRoles } from '../middleware/authorizeRoles';
@@ -40,6 +43,15 @@ router.get('/:rfqId/quotes', listQuotesHandler);
 
 /** GET  /api/rfqs/:rfqId/quotes/:quoteId — both roles */
 router.get('/:rfqId/quotes/:quoteId', getQuoteHandler);
+
+/** POST /api/rfqs/:rfqId/quotes/:quoteId/submit — ESTIMATOR only */
+router.post('/:rfqId/quotes/:quoteId/submit', authorizeRoles('ESTIMATOR'), submitQuoteHandler);
+
+/** POST /api/rfqs/:rfqId/quotes/:quoteId/mark-sent — SALES_HEAD only */
+router.post('/:rfqId/quotes/:quoteId/mark-sent', authorizeRoles('SALES_HEAD'), markSentHandler);
+
+/** GET  /api/rfqs/:rfqId/quotes/:quoteId/pdf — both roles (status check inside handler) */
+router.get('/:rfqId/quotes/:quoteId/pdf', downloadQuotePdfHandler);
 
 // ─── Single RFQ (must come AFTER sub-paths) ───────────────────────────────────
 router.get('/:id', getRFQ);

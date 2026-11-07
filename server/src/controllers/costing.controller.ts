@@ -26,9 +26,12 @@ import {
 } from '../services/costingWorkflow.service';
 import { getQuoteHistory, getQuoteVersion, QuoteServiceError } from '../services/quote.service';
 import { Quote } from '../models/Quote';
+import { RFQ } from '../models/RFQ';
 import { RateLookupError } from '../services/rateLookup.service';
 import { CostingPreviewSchema, SaveQuoteSchema } from '../validators/costing.validator';
 import type { IQuote, IRateSnapshot } from '../models/Quote';
+import { submitForApproval, markAsSent } from '../services/quote.service';
+import { generateQuotationPdf } from '../services/quotationPdf.service';
 
 // ─── Serialization helpers ────────────────────────────────────────────────────
 
@@ -285,6 +288,137 @@ export async function getQuoteHandler(
       return;
     }
     res.json({ success: true, data: serializeQuote(quote) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── POST /api/rfqs/:rfqId/quotes/:quoteId/submit ─────────────────────────────
+
+export async function submitQuoteHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { rfqId, quoteId } = req.params;
+    if (
+      !mongoose.Types.ObjectId.isValid(rfqId) ||
+      !mongoose.Types.ObjectId.isValid(quoteId)
+    ) {
+      res.status(400).json({ error: 'Invalid rfqId or quoteId' });
+      return;
+    }
+
+    // Verify quote belongs to this rfq
+    const quote = await Quote.findOne({
+      _id: new mongoose.Types.ObjectId(quoteId),
+      rfqId: new mongoose.Types.ObjectId(rfqId),
+    });
+    if (!quote) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
+    }
+
+    const submitterId = new mongoose.Types.ObjectId(req.user!.id);
+    const updated = await submitForApproval(
+      new mongoose.Types.ObjectId(rfqId),
+      quote.version,
+      submitterId,
+    );
+
+    res.json({ success: true, data: serializeQuote(updated) });
+  } catch (err) {
+    handleWorkflowError(err, res, next);
+  }
+}
+
+// ─── POST /api/rfqs/:rfqId/quotes/:quoteId/mark-sent ─────────────────────────
+
+export async function markSentHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { rfqId, quoteId } = req.params;
+    if (
+      !mongoose.Types.ObjectId.isValid(rfqId) ||
+      !mongoose.Types.ObjectId.isValid(quoteId)
+    ) {
+      res.status(400).json({ error: 'Invalid rfqId or quoteId' });
+      return;
+    }
+
+    const quote = await Quote.findOne({
+      _id: new mongoose.Types.ObjectId(quoteId),
+      rfqId: new mongoose.Types.ObjectId(rfqId),
+    });
+    if (!quote) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
+    }
+
+    const sentById = new mongoose.Types.ObjectId(req.user!.id);
+    const updated = await markAsSent(
+      new mongoose.Types.ObjectId(rfqId),
+      quote.version,
+      sentById,
+    );
+
+    res.json({ success: true, data: serializeQuote(updated) });
+  } catch (err) {
+    handleWorkflowError(err, res, next);
+  }
+}
+
+// ─── GET /api/rfqs/:rfqId/quotes/:quoteId/pdf ────────────────────────────────
+
+export async function downloadQuotePdfHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { rfqId, quoteId } = req.params;
+    if (
+      !mongoose.Types.ObjectId.isValid(rfqId) ||
+      !mongoose.Types.ObjectId.isValid(quoteId)
+    ) {
+      res.status(400).json({ error: 'Invalid rfqId or quoteId' });
+      return;
+    }
+
+    const quote = await Quote.findOne({
+      _id: new mongoose.Types.ObjectId(quoteId),
+      rfqId: new mongoose.Types.ObjectId(rfqId),
+    });
+    if (!quote) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
+    }
+
+    // PDF is only available for quotes that have been approved or sent
+    const allowedStatuses = ['APPROVED', 'READY_FOR_SALES', 'SENT'];
+    if (!allowedStatuses.includes(quote.status)) {
+      res.status(403).json({
+        error: `PDF not available for status "${quote.status}". Quote must be APPROVED, READY_FOR_SALES, or SENT.`,
+      });
+      return;
+    }
+
+    const rfq = await RFQ.findById(rfqId).lean();
+    if (!rfq) {
+      res.status(404).json({ error: 'RFQ not found' });
+      return;
+    }
+
+    const pdfBuffer = await generateQuotationPdf(quote, rfq as { rfqNo: string; customer: string; dueDate?: Date });
+    const filename = `Quotation-${rfq.rfqNo}-v${quote.version}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
   } catch (err) {
     next(err);
   }

@@ -13,6 +13,7 @@ import cookieParser from 'cookie-parser';
 import { config } from './config/env';
 import authRoutes from './routes/auth.routes';
 import rfqRoutes from './routes/rfq.routes';
+import approvalRoutes from './routes/approval.routes';
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/rfqs', rfqRoutes);
+app.use('/api/approvals', approvalRoutes);
 // ---------------------------------------------------------------------------
 // 404
 // ---------------------------------------------------------------------------
