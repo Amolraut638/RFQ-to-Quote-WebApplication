@@ -5,7 +5,6 @@ import { CostingFormInputs, CostingPreviewResult, VolumeTier, QuoteSummary } fro
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
-
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
 function fmt(str: string, decimals = 2): string {
@@ -153,6 +152,11 @@ export function CostingResultsPage() {
   const [saveError, setSaveError] = useState('');
   const [savedQuote, setSavedQuote] = useState<QuoteSummary | null>(null);
 
+  // Day 4: submit-for-approval state
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+
   if (!state?.preview) {
     return <Navigate to={`/rfqs/${rfqId}/parts/${partId}/costing`} replace />;
   }
@@ -174,6 +178,20 @@ export function CostingResultsPage() {
       setSaveError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSubmit() {
+    if (!rfqId || !savedQuote) return;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      await costingApi.submitQuote(rfqId, savedQuote._id);
+      setSubmitted(true);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Submit failed');
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -290,6 +308,33 @@ export function CostingResultsPage() {
           rfqId={rfqId!}
           approvalRequired={approvalDecision.requiresApproval}
         />
+      )}
+
+      {/* Submit for approval — shown after save, before submission */}
+      {savedQuote && !submitted && user?.role === 'ESTIMATOR' && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            variant="primary"
+            size="md"
+            loading={submitting}
+            onClick={handleSubmit}
+          >
+            Submit for Approval
+          </Button>
+          {submitError && (
+            <span className="text-sm text-red-600">{submitError}</span>
+          )}
+        </div>
+      )}
+
+      {/* Submitted confirmation banner */}
+      {submitted && (
+        <div className="p-4 rounded bg-blue-50 border border-blue-200 text-sm text-blue-700">
+          ✓ Quote submitted.{' '}
+          {approvalDecision.requiresApproval
+            ? 'It is now pending Sales Head approval.'
+            : 'It is ready for sales (no approval required).'}
+        </div>
       )}
 
       {/* Save error */}

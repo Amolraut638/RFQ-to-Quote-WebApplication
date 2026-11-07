@@ -4,6 +4,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RFQListPage } from './pages/RFQListPage';
 import { RFQDetailPage } from './pages/RFQDetailPage';
 import { ApprovalPage } from './pages/ApprovalPage';
+import { QuoteReviewPage } from './pages/QuoteReviewPage';
 import { PartCostingPage } from './pages/PartCostingPage';
 import { CostingResultsPage } from './pages/CostingResultsPage';
 
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/rfqs/:rfqId/parts/:partId/costing" element={<PartCostingPage />} />
         <Route path="/rfqs/:rfqId/parts/:partId/results" element={<CostingResultsPage />} />
         <Route path="/approval" element={<ApprovalPage />} />
+        <Route path="/approvals/:quoteId" element={<QuoteReviewPage />} />
       </Route>
 
       {/* Catch-all */}

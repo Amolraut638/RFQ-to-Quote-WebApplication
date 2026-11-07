@@ -57,6 +57,7 @@ function quoteStatusVariant(
     case 'PENDING_APPROVAL': return 'yellow';
     case 'APPROVED':         return 'green';
     case 'REJECTED':         return 'red';
+    case 'READY_FOR_SALES':  return 'blue';
     case 'SENT':             return 'blue';
   }
 }
@@ -67,6 +68,7 @@ function quoteStatusLabel(status: QuoteStatus): string {
     case 'PENDING_APPROVAL': return 'Pending Approval';
     case 'APPROVED':         return 'Approved';
     case 'REJECTED':         return 'Rejected';
+    case 'READY_FOR_SALES':  return 'Ready for Sales';
     case 'SENT':             return 'Sent';
   }
 }
@@ -265,6 +267,18 @@ export function RFQDetailPage() {
                     </td>
                     <td className="tabular text-sm text-gray-500">
                       {formatDate(q.createdAt)}
+                    </td>
+                    <td className="text-right">
+                      {user?.role === 'SALES_HEAD' &&
+                        ['PENDING_APPROVAL', 'APPROVED', 'READY_FOR_SALES', 'SENT'].includes(q.status) && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => navigate(`/approvals/${q._id}`)}
+                        >
+                          Review →
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}

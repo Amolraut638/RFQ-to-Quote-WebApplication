@@ -8,6 +8,9 @@ import {
   CostingPreviewResult,
   RoutingOperationInput,
   QuoteSummary,
+  QuoteDetail,
+  QuoteEvent,
+  PendingApproval,
 } from '../types';
 
 export const authApi = {
@@ -78,4 +81,34 @@ export const costingApi = {
 
   getQuote: (rfqId: string, quoteId: string) =>
     api.get<ApiResponse<QuoteSummary>>(`/api/rfqs/${rfqId}/quotes/${quoteId}`),
+
+  /** Submit a DRAFT quote for approval / ready-for-sales. ESTIMATOR only. */
+  submitQuote: (rfqId: string, quoteId: string) =>
+    api.post<ApiResponse<QuoteSummary>>(`/api/rfqs/${rfqId}/quotes/${quoteId}/submit`),
+
+  /** Mark an APPROVED or READY_FOR_SALES quote as sent. SALES_HEAD only. */
+  markSent: (rfqId: string, quoteId: string) =>
+    api.post<ApiResponse<QuoteSummary>>(`/api/rfqs/${rfqId}/quotes/${quoteId}/mark-sent`),
+
+  /** Download the PDF for an APPROVED / READY_FOR_SALES / SENT quote. */
+  downloadPdf: (rfqId: string, quoteId: string) =>
+    api.get(`/api/rfqs/${rfqId}/quotes/${quoteId}/pdf`, { responseType: 'blob' }),
+};
+
+export const approvalApi = {
+  /** GET /api/approvals/pending — Sales Head: list all PENDING_APPROVAL quotes. */
+  getPending: () =>
+    api.get<ApiResponse<PendingApproval[]>>('/api/approvals/pending'),
+
+  /** GET /api/approvals/:quoteId — get quote + audit trail. */
+  getQuote: (quoteId: string) =>
+    api.get<ApiResponse<{ quote: QuoteDetail; events: QuoteEvent[] }>>(`/api/approvals/${quoteId}`),
+
+  /** POST /api/approvals/:quoteId/approve */
+  approve: (quoteId: string) =>
+    api.post<ApiResponse<QuoteDetail>>(`/api/approvals/${quoteId}/approve`),
+
+  /** POST /api/approvals/:quoteId/reject — body: { comment } */
+  reject: (quoteId: string, comment: string) =>
+    api.post<ApiResponse<QuoteDetail>>(`/api/approvals/${quoteId}/reject`, { comment }),
 };
