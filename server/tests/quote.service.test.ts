@@ -32,9 +32,21 @@ vi.mock('../src/models/Quote', async () => {
       findOne: vi.fn(),
       find: vi.fn(),
       create: vi.fn(),
+      findOneAndUpdate: vi.fn(),
     },
   };
 });
+
+vi.mock('../src/models/QuoteEvent', () => ({
+  QuoteEvent: { create: vi.fn().mockResolvedValue([{}]), find: vi.fn() },
+}));
+
+// approveQuote now runs inside a MongoDB transaction; fake the session.
+const fakeSession = {
+  withTransaction: async (fn: () => Promise<void>) => { await fn(); },
+  endSession: async () => undefined,
+};
+vi.spyOn(mongoose, 'startSession').mockResolvedValue(fakeSession as never);
 
 import {
   createQuote,
@@ -327,14 +339,18 @@ describe('approveQuote', () => {
     const q = fakeQuote({ version: 2, status: 'PENDING_APPROVAL' });
     mockFindOne.mockResolvedValue(q);
 
-    const beforeApproval = Date.now();
-    await approveQuote({ rfqId, version: 2, approverId });
+    (Quote.findOneAndUpdate as ReturnType<typeof vi.fn>).mockImplementation(
+      (_f: unknown, update: { $set: Record<string, unknown> }) =>
+        Promise.resolve({ ...q, ...update.$set }),
+    );
 
-    expect(q.status).toBe('APPROVED');
-    expect(q.approverId).toEqual(approverId);
-    expect(q.approvedAt).toBeInstanceOf(Date);
-    expect(q.approvedAt!.getTime()).toBeGreaterThanOrEqual(beforeApproval);
-    expect(q.save).toHaveBeenCalled();
+    const beforeApproval = Date.now();
+    const result = await approveQuote({ rfqId, version: 2, approverId });
+
+    expect(result.status).toBe('APPROVED');
+    expect(result.approverId).toEqual(approverId);
+    expect(result.approvedAt).toBeInstanceOf(Date);
+    expect(result.approvedAt!.getTime()).toBeGreaterThanOrEqual(beforeApproval);
   });
 
   it('approval is on the SPECIFIC version requested', async () => {
@@ -345,8 +361,14 @@ describe('approveQuote', () => {
       return Promise.resolve(q);
     });
 
-    await approveQuote({ rfqId, version: 3, approverId });
-    expect(q.status).toBe('APPROVED');
+    (Quote.findOneAndUpdate as ReturnType<typeof vi.fn>).mockImplementation(
+      (filter: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+        expect(filter.version).toBe(3);
+        return Promise.resolve({ ...q, ...update.$set });
+      },
+    );
+    const result = await approveQuote({ rfqId, version: 3, approverId });
+    expect(result.status).toBe('APPROVED');
   });
 
   it('throws INVALID_STATUS_TRANSITION if not PENDING_APPROVAL', async () => {

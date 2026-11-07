@@ -255,66 +255,116 @@ export async function submitForApproval(
     quote.submittedAt = new Date();
   }
 
-  const saved = await quote.save();
-
-  // Write audit event (fire-and-forget — audit failure must not block submission)
-  if (submitterId) {
-    QuoteEvent.create({
-      quoteId: quote._id,
-      rfqId,
-      version: quote.version,
-      action: 'SUBMITTED',
-      actorId: submitterId,
-      timestamp: new Date(),
-    }).catch((err: unknown) => {
-      console.error('[quote.service] Failed to write SUBMITTED QuoteEvent:', err);
+  const session = await mongoose.startSession();
+  try {
+    let saved!: IQuote;
+    await session.withTransaction(async () => {
+      saved = await quote.save({ session });
+      // Status change and SUBMITTED audit event commit or roll back together.
+      if (submitterId) {
+        await QuoteEvent.create(
+          [
+            {
+              quoteId: quote._id,
+              rfqId,
+              version: quote.version,
+              action: 'SUBMITTED' as const,
+              actorId: submitterId,
+              timestamp: new Date(),
+            },
+          ],
+          { session },
+        );
+      }
     });
+    return saved;
+  } finally {
+    await session.endSession();
   }
-
-  return saved;
 }
 
 /**
  * Approve a PENDING_APPROVAL quote (PENDING_APPROVAL → APPROVED).
- * Records the approver and timestamp. Immutable after approval.
- * Writes an APPROVED QuoteEvent.
+ *
+ * Uses a MongoDB multi-document transaction to atomically:
+ *   1. Flip the quote status from PENDING_APPROVAL to APPROVED.
+ *   2. Write the APPROVED QuoteEvent audit record.
+ *
+ * Uses a conditional update (findOneAndUpdate with { status: 'PENDING_APPROVAL' })
+ * so that two concurrent approval requests cannot both succeed: only the first
+ * writer commits; the second sees no document and throws INVALID_STATUS_TRANSITION.
+ *
+ * If the transaction fails (including QuoteEvent write failure), the entire
+ * operation is rolled back and the quote status is NOT changed.
  */
 export async function approveQuote(params: ApproveQuoteParams): Promise<IQuote> {
   const { rfqId, version, approverId } = params;
-  const quote = await Quote.findOne({ rfqId, version });
-  if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
 
-  if (quote.status !== 'PENDING_APPROVAL') {
+  // Pre-flight: confirm the quote exists (outside transaction for a clear error)
+  const existing = await Quote.findOne({ rfqId, version });
+  if (!existing) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
+
+  if (existing.status !== 'PENDING_APPROVAL') {
     throw new QuoteServiceError(
       'INVALID_STATUS_TRANSITION',
-      `Only PENDING_APPROVAL quotes can be approved; current status: ${quote.status}`,
+      `Only PENDING_APPROVAL quotes can be approved; current status: ${existing.status}`,
     );
   }
 
-  quote.status = 'APPROVED';
-  quote.approverId = approverId;
-  quote.approvedAt = new Date();
-  const saved = await quote.save();
+  const session = await mongoose.startSession();
+  try {
+    let saved!: IQuote;
 
-  // Write audit event (fire-and-forget — audit failure must not block the approval)
-  QuoteEvent.create({
-    quoteId: quote._id,
-    rfqId,
-    version: quote.version,
-    action: 'APPROVED',
-    actorId: approverId,
-    timestamp: new Date(),
-  }).catch((err: unknown) => {
-    console.error('[quote.service] Failed to write APPROVED QuoteEvent:', err);
-  });
+    await session.withTransaction(async () => {
+      // Conditional update — only succeeds if status is still PENDING_APPROVAL.
+      // This prevents two concurrent approval requests from both succeeding.
+      const approvedAt = new Date();
+      const updated = await Quote.findOneAndUpdate(
+        { rfqId, version, status: 'PENDING_APPROVAL' },
+        { $set: { status: 'APPROVED', approverId, approvedAt } },
+        { new: true, session },
+      );
 
-  return saved;
+      if (!updated) {
+        // Another request won the race; expose a clear conflict error.
+        throw new QuoteServiceError(
+          'INVALID_STATUS_TRANSITION',
+          `Quote rfqId=${rfqId} v${version} is no longer PENDING_APPROVAL (concurrent approval conflict).`,
+        );
+      }
+
+      // Write audit event inside the same transaction — both succeed or both roll back.
+      await QuoteEvent.create(
+        [
+          {
+            quoteId: existing._id,
+            rfqId,
+            version,
+            action: 'APPROVED' as const,
+            actorId: approverId,
+            timestamp: approvedAt,
+          },
+        ],
+        { session },
+      );
+
+      saved = updated;
+    });
+
+    return saved;
+  } finally {
+    await session.endSession();
+  }
 }
 
 /**
  * Reject a PENDING_APPROVAL quote (PENDING_APPROVAL → REJECTED).
+ *
+ * Uses a MongoDB multi-document transaction to atomically:
+ *   1. Flip the quote status to REJECTED and store the mandatory comment.
+ *   2. Write the REJECTED QuoteEvent audit record.
+ *
  * Rejected versions remain in history and cannot be deleted.
- * Writes a REJECTED QuoteEvent with the mandatory comment.
  *
  * The rejecterId and comment parameters are optional so that existing tests
  * that call rejectQuote(rfqId, version) continue to compile and pass.
@@ -325,47 +375,76 @@ export async function rejectQuote(
   rejecterId?: mongoose.Types.ObjectId,
   comment?: string,
 ): Promise<IQuote> {
-  const quote = await Quote.findOne({ rfqId, version });
-  if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
+  const existing = await Quote.findOne({ rfqId, version });
+  if (!existing) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
 
-  if (quote.status !== 'PENDING_APPROVAL') {
+  if (existing.status !== 'PENDING_APPROVAL') {
     throw new QuoteServiceError(
       'INVALID_STATUS_TRANSITION',
-      `Only PENDING_APPROVAL quotes can be rejected; current status: ${quote.status}`,
+      `Only PENDING_APPROVAL quotes can be rejected; current status: ${existing.status}`,
     );
   }
 
-  quote.status = 'REJECTED';
-  if (rejecterId) {
-    quote.rejectedBy = rejecterId;
-    quote.rejectedAt = new Date();
-  }
-  if (comment) {
-    quote.rejectionComment = comment;
+  // If no rejecterId is supplied (backward-compat path used by old tests),
+  // fall back to a simple non-transactional save.
+  if (!rejecterId) {
+    existing.status = 'REJECTED';
+    return existing.save();
   }
 
-  const saved = await quote.save();
+  const session = await mongoose.startSession();
+  try {
+    let saved!: IQuote;
+    const rejectedAt = new Date();
 
-  if (rejecterId) {
-    QuoteEvent.create({
-      quoteId: quote._id,
-      rfqId,
-      version: quote.version,
-      action: 'REJECTED',
-      actorId: rejecterId,
-      timestamp: new Date(),
-      comment,
-    }).catch((err: unknown) => {
-      console.error('[quote.service] Failed to write REJECTED QuoteEvent:', err);
+    await session.withTransaction(async () => {
+      const updated = await Quote.findOneAndUpdate(
+        { rfqId, version, status: 'PENDING_APPROVAL' },
+        {
+          $set: {
+            status: 'REJECTED',
+            rejectedBy: rejecterId,
+            rejectedAt,
+            ...(comment ? { rejectionComment: comment } : {}),
+          },
+        },
+        { new: true, session },
+      );
+
+      if (!updated) {
+        throw new QuoteServiceError(
+          'INVALID_STATUS_TRANSITION',
+          `Quote rfqId=${rfqId} v${version} is no longer PENDING_APPROVAL (concurrent modification).`,
+        );
+      }
+
+      await QuoteEvent.create(
+        [
+          {
+            quoteId: existing._id,
+            rfqId,
+            version,
+            action: 'REJECTED' as const,
+            actorId: rejecterId,
+            timestamp: rejectedAt,
+            comment,
+          },
+        ],
+        { session },
+      );
+
+      saved = updated;
     });
-  }
 
-  return saved;
+    return saved;
+  } finally {
+    await session.endSession();
+  }
 }
 
 /**
  * Mark an APPROVED or READY_FOR_SALES quote as SENT.
- * Records sentBy/sentAt and writes a SENT QuoteEvent.
+ * Records sentBy/sentAt and writes a SENT QuoteEvent (awaited).
  * The sentById parameter is optional for backward compatibility.
  */
 export async function markAsSent(
@@ -389,22 +468,32 @@ export async function markAsSent(
     quote.sentAt = new Date();
   }
 
-  const saved = await quote.save();
-
-  if (sentById) {
-    QuoteEvent.create({
-      quoteId: quote._id,
-      rfqId,
-      version: quote.version,
-      action: 'SENT',
-      actorId: sentById,
-      timestamp: new Date(),
-    }).catch((err: unknown) => {
-      console.error('[quote.service] Failed to write SENT QuoteEvent:', err);
+  const session = await mongoose.startSession();
+  try {
+    let saved!: IQuote;
+    await session.withTransaction(async () => {
+      saved = await quote.save({ session });
+      // Status change and SENT audit event commit or roll back together.
+      if (sentById) {
+        await QuoteEvent.create(
+          [
+            {
+              quoteId: quote._id,
+              rfqId,
+              version: quote.version,
+              action: 'SENT' as const,
+              actorId: sentById,
+              timestamp: new Date(),
+            },
+          ],
+          { session },
+        );
+      }
     });
+    return saved;
+  } finally {
+    await session.endSession();
   }
-
-  return saved;
 }
 
 /**
