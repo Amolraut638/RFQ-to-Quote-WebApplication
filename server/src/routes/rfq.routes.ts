@@ -3,7 +3,7 @@
  */
 
 import { Router } from 'express';
-import { listRFQs, getRFQ, createRFQ } from '../controllers/rfq.controller';
+import { listRFQs, getRFQ, createRFQ, createRFQPart } from '../controllers/rfq.controller';
 import {
   getCostingContextHandler,
   getCostingPreviewHandler,
@@ -28,6 +28,9 @@ router.post('/', authorizeRoles('ESTIMATOR'), createRFQ);
 
 // ─── Costing workflow (nested under rfqId) ───────────────────────────────────
 // Order matters: more specific paths first to avoid /:id catching sub-paths.
+
+/** POST /api/rfqs/:rfqId/parts — ESTIMATOR only */
+router.post('/:rfqId/parts', authorizeRoles('ESTIMATOR'), createRFQPart);
 
 /** GET  /api/rfqs/:rfqId/costing-context?partId=xxx&costingDate=... */
 router.get('/:rfqId/costing-context', getCostingContextHandler);

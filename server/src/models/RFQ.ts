@@ -19,6 +19,7 @@ export interface IRFQ extends Document {
   status: RFQStatus;
   lostReason?: string;
   sourceEmailText?: string;
+  customerContact?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +39,7 @@ const RFQSchema = new Schema<IRFQ>(
     },
     lostReason: { type: String },
     sourceEmailText: { type: String },
+    customerContact: { type: String, trim: true },
   },
   { timestamps: true }
 );

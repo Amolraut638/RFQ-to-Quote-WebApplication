@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as RFQService from '../services/rfq.service';
 import { CreateRFQSchema } from '../validators/rfq.validator';
+import { createPart, CreatePartSchema, PartServiceError } from '../services/part.service';
 
 export async function listRFQs(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -52,6 +53,26 @@ export async function createRFQ(req: Request, res: Response, next: NextFunction)
 
     res.status(201).json({ success: true, data: rfq });
   } catch (err) {
+    next(err);
+  }
+}
+
+export async function createRFQPart(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const parsed = CreatePartSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+      return;
+    }
+
+    const part = await createPart(req.params.rfqId, parsed.data);
+    res.status(201).json({ success: true, data: part });
+  } catch (err) {
+    if (err instanceof PartServiceError) {
+      const status = err.code === 'RFQ_NOT_FOUND' ? 404 : 400;
+      res.status(status).json({ error: err.message, code: err.code });
+      return;
+    }
     next(err);
   }
 }

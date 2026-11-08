@@ -14,6 +14,8 @@ import { config } from './config/env';
 import authRoutes from './routes/auth.routes';
 import rfqRoutes from './routes/rfq.routes';
 import approvalRoutes from './routes/approval.routes';
+import intakeRoutes from './routes/intake.routes';
+import partRoutes from './routes/part.routes';
 
 const app = express();
 
@@ -49,6 +51,8 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/rfqs', rfqRoutes);
 app.use('/api/approvals', approvalRoutes);
+app.use('/api/intake', intakeRoutes);
+app.use('/api/parts', partRoutes);
 // ---------------------------------------------------------------------------
 // 404
 // ---------------------------------------------------------------------------

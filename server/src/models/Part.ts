@@ -18,6 +18,8 @@ export interface IPart extends Document {
   annualVolume: number;
   cycleTimeMinutes?: number;
   machineHourRateRef?: mongoose.Types.Decimal128; // reference figure only
+  drawingNumber?: string;
+  drawingRevision?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +33,8 @@ const PartSchema = new Schema<IPart>(
     annualVolume: { type: Number, required: true, min: 1 },
     cycleTimeMinutes: { type: Number },
     machineHourRateRef: { type: mongoose.Schema.Types.Decimal128 },
+    drawingNumber: { type: String, trim: true },
+    drawingRevision: { type: String, trim: true },
   },
   { timestamps: true }
 );

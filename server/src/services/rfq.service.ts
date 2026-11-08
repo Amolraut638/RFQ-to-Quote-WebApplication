@@ -4,6 +4,7 @@
  * RFQ business logic and database operations.
  */
 
+import type { ClientSession } from 'mongoose';
 import { RFQ, IRFQ } from '../models/RFQ';
 import { Part } from '../models/Part';
 
@@ -46,13 +47,21 @@ export async function getRFQById(id: string): Promise<Record<string, unknown> | 
   return { ...(rfq as unknown as Record<string, unknown>), parts };
 }
 
-export async function createRFQ(data: {
-  rfqNo: string;
-  customer: string;
-  receivedDate: Date;
-  dueDate: Date;
-  ownerId: string;
-  sourceEmailText?: string;
-}): Promise<IRFQ> {
+export async function createRFQ(
+  data: {
+    rfqNo: string;
+    customer: string;
+    receivedDate: Date;
+    dueDate: Date;
+    ownerId: string;
+    sourceEmailText?: string;
+    customerContact?: string;
+  },
+  session?: ClientSession,
+): Promise<IRFQ> {
+  if (session) {
+    const [doc] = await RFQ.create([data], { session });
+    return doc;
+  }
   return RFQ.create(data);
 }
