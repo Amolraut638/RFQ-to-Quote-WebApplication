@@ -442,3 +442,134 @@ export interface HistoricalQuoteComparisonResult {
   rows: ComparisonRow[];
 }
 
+// ─── Quote Revision Comparison ───────────────────────────────────────────────
+
+export type ChangeDirection = 'INCREASED' | 'DECREASED' | 'UNCHANGED';
+
+export interface RevisionUserSummary {
+  _id: string;
+  name: string;
+  email: string;
+  role?: string;
+}
+
+export interface RevisionEventSummary {
+  action: 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'SENT';
+  actor: RevisionUserSummary | string;
+  timestamp: string;
+  comment: string | null;
+}
+
+export interface RevisionMetadata {
+  quoteId: string;
+  version: number;
+  status: QuoteStatus;
+  costingDate: string;
+  createdAt: string;
+  createdBy: RevisionUserSummary | string;
+  submittedBy: RevisionUserSummary | string | null;
+  submittedAt: string | null;
+  approvedBy: RevisionUserSummary | string | null;
+  approvedAt: string | null;
+  rejectedBy: RevisionUserSummary | string | null;
+  rejectedAt: string | null;
+  rejectionComment: string | null;
+  sentBy: RevisionUserSummary | string | null;
+  sentAt: string | null;
+  events: RevisionEventSummary[];
+}
+
+export interface RevisionComparisonRow {
+  key: string;
+  label: string;
+  category: 'SPEC_AND_RATES' | 'COST_BREAKDOWN' | 'SELLING_PRICE_AND_VOLUME' | 'GST';
+  unit: 'INR_PER_KG' | 'INR_PER_PC' | 'INR' | 'KG' | 'PCT' | 'PCS';
+  versionAValue: string;
+  versionBValue: string;
+  absoluteDifference: string;
+  percentageDifference: string | null;
+  direction: ChangeDirection;
+  note?: string;
+}
+
+export type RoutingDiffStatus = 'UNCHANGED' | 'MODIFIED' | 'ADDED' | 'REMOVED';
+
+export interface RoutingOperationDiff {
+  stepNumberA: number | null;
+  stepNumberB: number | null;
+  operationName: string;
+  status: RoutingDiffStatus;
+  machineA: string | null;
+  machineB: string | null;
+  machineChanged: boolean;
+  machineHourRateA: string | null;
+  machineHourRateB: string | null;
+  machineHourRateDiff: string | null;
+  machineHourRatePctDiff: string | null;
+  cycleTimeMinutesA: string | null;
+  cycleTimeMinutesB: string | null;
+  cycleTimeDiffMinutes: string | null;
+  cycleTimePctDiff: string | null;
+  operationCostA: string | null;
+  operationCostB: string | null;
+  operationCostDiff: string | null;
+  operationCostPctDiff: string | null;
+}
+
+export interface TierMetricDiff {
+  valueA: string;
+  valueB: string;
+  absoluteDifference: string;
+  percentageDifference: string | null;
+  direction: ChangeDirection;
+}
+
+export interface VolumeTierRevisionComparison {
+  tierPercentage: 50 | 100 | 150;
+  tierName: string;
+  tierVolume: TierMetricDiff;
+  setupAllocationPerPiece: TierMetricDiff;
+  totalCostPerPiece: TierMetricDiff;
+  sellingPriceExGst: TierMetricDiff;
+  gstAmount: TierMetricDiff;
+  sellingPriceIncludingGst: TierMetricDiff;
+  tierAnnualQuoteValueExGst: TierMetricDiff;
+}
+
+export interface QuoteRevisionComparisonResult {
+  rfq: {
+    _id: string;
+    rfqNo: string;
+    customer: string;
+  };
+  part: {
+    _id: string | null;
+    partName: string;
+    drawingNumber: string | null;
+    materialA: string;
+    materialB: string;
+    materialChanged: boolean;
+  };
+  versionA: RevisionMetadata;
+  versionB: RevisionMetadata;
+  summary: {
+    sellingPriceExGst: TierMetricDiff;
+    totalCostPerPiece: TierMetricDiff;
+    annualQuoteValue: TierMetricDiff;
+    gstAmountPerPiece: TierMetricDiff;
+    sellingPriceIncludingGst: TierMetricDiff;
+    totalCycleTimeMinutes: TierMetricDiff;
+  };
+  parameterRows: RevisionComparisonRow[];
+  gstRows: RevisionComparisonRow[];
+  routingComparison: {
+    operations: RoutingOperationDiff[];
+    addedCount: number;
+    removedCount: number;
+    modifiedCount: number;
+    unchangedCount: number;
+  };
+  tierComparisons: VolumeTierRevisionComparison[];
+}
+
+

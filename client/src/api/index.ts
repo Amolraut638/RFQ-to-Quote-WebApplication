@@ -17,6 +17,7 @@ import {
   RoutingSuggestionResult,
   SearchHistoricalQuotesResponse,
   HistoricalQuoteComparisonResult,
+  QuoteRevisionComparisonResult,
 } from '../types';
 
 export const authApi = {
@@ -187,4 +188,17 @@ export const partApi = {
       `/api/parts/${partId}/historical-quotes/${quoteId}/compare`,
       body,
     ),
+};
+
+export const quoteApi = {
+  /** GET /api/quotes/:quoteId/compare?versionA=1&versionB=2 */
+  compareVersions: (quoteId: string, versionA: number, versionB: number) => {
+    const query = new URLSearchParams({
+      versionA: String(versionA),
+      versionB: String(versionB),
+    });
+    return api.get<ApiResponse<QuoteRevisionComparisonResult>>(
+      `/api/quotes/${quoteId}/compare?${query.toString()}`,
+    );
+  },
 };

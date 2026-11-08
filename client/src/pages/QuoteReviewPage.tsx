@@ -14,7 +14,7 @@
  *  - Audit trail table
  */
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { approvalApi, costingApi } from '../api';
 import {
   QuoteDetail,
@@ -410,7 +410,16 @@ export function QuoteReviewPage() {
             </Badge>
           </div>
           {rfqRef && (
-            <p className="text-sm text-gray-600 mt-1">{rfqRef.customer}</p>
+            <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
+              <span>{rfqRef.customer}</span>
+              <span className="text-gray-300">·</span>
+              <Link
+                to={`/rfqs/${rfqRef._id}`}
+                className="text-brand-600 hover:underline text-xs font-medium"
+              >
+                View RFQ &amp; Compare Versions →
+              </Link>
+            </div>
           )}
         </div>
 
