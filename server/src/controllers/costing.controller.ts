@@ -127,7 +127,9 @@ function handleWorkflowError(
     return;
   }
   if (err instanceof QuoteServiceError) {
-    const status = err.code === 'QUOTE_IMMUTABLE' ? 409 : 400;
+    const status =
+      err.code === 'QUOTE_NOT_FOUND' ? 404 :
+      err.code === 'QUOTE_IMMUTABLE' || err.code === 'STATUS_CONFLICT' ? 409 : 400;
     res.status(status).json({ error: err.message, code: err.code });
     return;
   }

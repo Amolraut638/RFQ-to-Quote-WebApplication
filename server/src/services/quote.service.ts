@@ -24,13 +24,14 @@ import mongoose from 'mongoose';
 import {
   Quote,
   IMMUTABLE_STATUSES,
+  type QuoteStatus,
   type IQuote,
   type IRateSnapshot,
   type ICostingInputSnapshot,
   type ICostBreakdownSnapshot,
   type IVolumeTierSnapshot,
 } from '../models/Quote';
-import { QuoteEvent, type IQuoteEvent } from '../models/QuoteEvent';
+import { QuoteEvent, type IQuoteEvent, type QuoteEventAction } from '../models/QuoteEvent';
 import type { CostingInput, CostingResult, VolumeTierOutput, CostingOutput } from '@rfq/costing-engine';
 import { evaluateApproval } from '@rfq/costing-engine';
 
@@ -40,7 +41,8 @@ export type QuoteServiceErrorCode =
   | 'QUOTE_NOT_FOUND'
   | 'QUOTE_IMMUTABLE'
   | 'INVALID_STATUS_TRANSITION'
-  | 'VERSION_NOT_FOUND';
+  | 'VERSION_NOT_FOUND'
+  | 'STATUS_CONFLICT';
 
 export class QuoteServiceError extends Error {
   public readonly code: QuoteServiceErrorCode;
@@ -219,26 +221,86 @@ export async function reviseQuote(params: ReviseQuoteParams): Promise<IQuote> {
 }
 
 /**
+ * Shared transactional status transition.
+ *
+ * In ONE MongoDB transaction:
+ *   1. Conditionally update the quote: the filter includes `status: { $in: from }`,
+ *      so the update only applies if the quote is still in an expected previous state.
+ *   2. Write the matching QuoteEvent with the same session.
+ *
+ * If another request already moved the quote (conditional update matches nothing) a
+ * STATUS_CONFLICT error is thrown and nothing is written. If the audit write fails,
+ * the transaction aborts and the status change is rolled back. Errors are never swallowed.
+ */
+async function transitionWithAudit(args: {
+  rfqId: mongoose.Types.ObjectId;
+  version: number;
+  from: readonly QuoteStatus[];
+  set: Record<string, unknown>;
+  action: QuoteEventAction;
+  actorId: mongoose.Types.ObjectId;
+  at: Date;
+  comment?: string;
+}): Promise<IQuote> {
+  const { rfqId, version, from, set, action, actorId, at, comment } = args;
+  const session = await mongoose.startSession();
+  try {
+    let saved: IQuote | undefined;
+    await session.withTransaction(async () => {
+      const updated = await Quote.findOneAndUpdate(
+        { rfqId, version, status: { $in: from } },
+        { $set: set },
+        { new: true, session },
+      );
+      if (!updated) {
+        throw new QuoteServiceError(
+          'STATUS_CONFLICT',
+          `Quote rfqId=${rfqId} v${version} is no longer in ${from.join(' / ')} ` +
+            `(it was changed by another request); ${action} not applied.`,
+        );
+      }
+      await QuoteEvent.create(
+        [
+          {
+            quoteId: updated._id,
+            rfqId,
+            version,
+            action,
+            actorId,
+            timestamp: at,
+            ...(comment ? { comment } : {}),
+          },
+        ],
+        { session },
+      );
+      saved = updated;
+    });
+    return saved as IQuote;
+  } finally {
+    await session.endSession();
+  }
+}
+
+async function loadQuote(rfqId: mongoose.Types.ObjectId, version: number): Promise<IQuote> {
+  const quote = await Quote.findOne({ rfqId, version });
+  if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
+  return quote;
+}
+
+/**
  * Submit a DRAFT quote for approval.
- *
- * Uses the approval threshold from the costing engine:
- *  - Annual value STRICTLY > ₹25,00,000 → PENDING_APPROVAL (requires Sales Head)
- *  - Annual value ≤ ₹25,00,000           → READY_FOR_SALES  (no approval needed)
- *
- * Records submittedBy/submittedAt and writes a SUBMITTED QuoteEvent.
- * The submitterId parameter is optional for backward compatibility with
- * existing tests that call submitForApproval(rfqId, version).
+ *  - Annual value STRICTLY > ₹25,00,000 → PENDING_APPROVAL
+ *  - Annual value ≤ ₹25,00,000          → READY_FOR_SALES
+ * Target status is derived from the persisted annualQuotationValue via evaluateApproval.
+ * Atomic with the SUBMITTED event; only succeeds from DRAFT.
  */
 export async function submitForApproval(
   rfqId: mongoose.Types.ObjectId,
   version: number,
-  submitterId?: mongoose.Types.ObjectId,
+  submitterId: mongoose.Types.ObjectId,
 ): Promise<IQuote> {
-  const quote = await Quote.findOne({ rfqId, version });
-  if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
-
+  const quote = await loadQuote(rfqId, version);
   assertMutable(quote);
-
   if (quote.status !== 'DRAFT') {
     throw new QuoteServiceError(
       'INVALID_STATUS_TRANSITION',
@@ -246,255 +308,111 @@ export async function submitForApproval(
     );
   }
 
-  // Determine target status using the costing engine threshold logic
   const decision = evaluateApproval([quote.annualQuotationValue]);
-  quote.status = decision.requiresApproval ? 'PENDING_APPROVAL' : 'READY_FOR_SALES';
-
-  if (submitterId) {
-    quote.submittedBy = submitterId;
-    quote.submittedAt = new Date();
-  }
-
-  const session = await mongoose.startSession();
-  try {
-    let saved!: IQuote;
-    await session.withTransaction(async () => {
-      saved = await quote.save({ session });
-      // Status change and SUBMITTED audit event commit or roll back together.
-      if (submitterId) {
-        await QuoteEvent.create(
-          [
-            {
-              quoteId: quote._id,
-              rfqId,
-              version: quote.version,
-              action: 'SUBMITTED' as const,
-              actorId: submitterId,
-              timestamp: new Date(),
-            },
-          ],
-          { session },
-        );
-      }
-    });
-    return saved;
-  } finally {
-    await session.endSession();
-  }
+  const at = new Date();
+  return transitionWithAudit({
+    rfqId,
+    version,
+    from: ['DRAFT'],
+    set: {
+      status: decision.requiresApproval ? 'PENDING_APPROVAL' : 'READY_FOR_SALES',
+      submittedBy: submitterId,
+      submittedAt: at,
+    },
+    action: 'SUBMITTED',
+    actorId: submitterId,
+    at,
+  });
 }
 
 /**
- * Approve a PENDING_APPROVAL quote (PENDING_APPROVAL → APPROVED).
- *
- * Uses a MongoDB multi-document transaction to atomically:
- *   1. Flip the quote status from PENDING_APPROVAL to APPROVED.
- *   2. Write the APPROVED QuoteEvent audit record.
- *
- * Uses a conditional update (findOneAndUpdate with { status: 'PENDING_APPROVAL' })
- * so that two concurrent approval requests cannot both succeed: only the first
- * writer commits; the second sees no document and throws INVALID_STATUS_TRANSITION.
- *
- * If the transaction fails (including QuoteEvent write failure), the entire
- * operation is rolled back and the quote status is NOT changed.
+ * Approve a PENDING_APPROVAL quote. Exactly one concurrent approver can win.
  */
 export async function approveQuote(params: ApproveQuoteParams): Promise<IQuote> {
   const { rfqId, version, approverId } = params;
-
-  // Pre-flight: confirm the quote exists (outside transaction for a clear error)
-  const existing = await Quote.findOne({ rfqId, version });
-  if (!existing) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
-
+  const existing = await loadQuote(rfqId, version);
   if (existing.status !== 'PENDING_APPROVAL') {
     throw new QuoteServiceError(
       'INVALID_STATUS_TRANSITION',
       `Only PENDING_APPROVAL quotes can be approved; current status: ${existing.status}`,
     );
   }
-
-  const session = await mongoose.startSession();
-  try {
-    let saved!: IQuote;
-
-    await session.withTransaction(async () => {
-      // Conditional update — only succeeds if status is still PENDING_APPROVAL.
-      // This prevents two concurrent approval requests from both succeeding.
-      const approvedAt = new Date();
-      const updated = await Quote.findOneAndUpdate(
-        { rfqId, version, status: 'PENDING_APPROVAL' },
-        { $set: { status: 'APPROVED', approverId, approvedAt } },
-        { new: true, session },
-      );
-
-      if (!updated) {
-        // Another request won the race; expose a clear conflict error.
-        throw new QuoteServiceError(
-          'INVALID_STATUS_TRANSITION',
-          `Quote rfqId=${rfqId} v${version} is no longer PENDING_APPROVAL (concurrent approval conflict).`,
-        );
-      }
-
-      // Write audit event inside the same transaction — both succeed or both roll back.
-      await QuoteEvent.create(
-        [
-          {
-            quoteId: existing._id,
-            rfqId,
-            version,
-            action: 'APPROVED' as const,
-            actorId: approverId,
-            timestamp: approvedAt,
-          },
-        ],
-        { session },
-      );
-
-      saved = updated;
-    });
-
-    return saved;
-  } finally {
-    await session.endSession();
-  }
+  const at = new Date();
+  return transitionWithAudit({
+    rfqId,
+    version,
+    from: ['PENDING_APPROVAL'],
+    set: { status: 'APPROVED', approverId, approvedAt: at },
+    action: 'APPROVED',
+    actorId: approverId,
+    at,
+  });
 }
 
 /**
- * Reject a PENDING_APPROVAL quote (PENDING_APPROVAL → REJECTED).
- *
- * Uses a MongoDB multi-document transaction to atomically:
- *   1. Flip the quote status to REJECTED and store the mandatory comment.
- *   2. Write the REJECTED QuoteEvent audit record.
- *
- * Rejected versions remain in history and cannot be deleted.
- *
- * The rejecterId and comment parameters are optional so that existing tests
- * that call rejectQuote(rfqId, version) continue to compile and pass.
+ * Reject a PENDING_APPROVAL quote. The rejecter ID and a non-empty comment are
+ * required; rejected versions remain in history.
  */
 export async function rejectQuote(
   rfqId: mongoose.Types.ObjectId,
   version: number,
-  rejecterId?: mongoose.Types.ObjectId,
-  comment?: string,
+  rejecterId: mongoose.Types.ObjectId,
+  comment: string,
 ): Promise<IQuote> {
-  const existing = await Quote.findOne({ rfqId, version });
-  if (!existing) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
-
+  if (!rejecterId) {
+    throw new QuoteServiceError('INVALID_STATUS_TRANSITION', 'rejecterId is required to reject a quote');
+  }
+  if (!comment || !comment.trim()) {
+    throw new QuoteServiceError('INVALID_STATUS_TRANSITION', 'A rejection comment is required');
+  }
+  const existing = await loadQuote(rfqId, version);
   if (existing.status !== 'PENDING_APPROVAL') {
     throw new QuoteServiceError(
       'INVALID_STATUS_TRANSITION',
       `Only PENDING_APPROVAL quotes can be rejected; current status: ${existing.status}`,
     );
   }
-
-  // If no rejecterId is supplied (backward-compat path used by old tests),
-  // fall back to a simple non-transactional save.
-  if (!rejecterId) {
-    existing.status = 'REJECTED';
-    return existing.save();
-  }
-
-  const session = await mongoose.startSession();
-  try {
-    let saved!: IQuote;
-    const rejectedAt = new Date();
-
-    await session.withTransaction(async () => {
-      const updated = await Quote.findOneAndUpdate(
-        { rfqId, version, status: 'PENDING_APPROVAL' },
-        {
-          $set: {
-            status: 'REJECTED',
-            rejectedBy: rejecterId,
-            rejectedAt,
-            ...(comment ? { rejectionComment: comment } : {}),
-          },
-        },
-        { new: true, session },
-      );
-
-      if (!updated) {
-        throw new QuoteServiceError(
-          'INVALID_STATUS_TRANSITION',
-          `Quote rfqId=${rfqId} v${version} is no longer PENDING_APPROVAL (concurrent modification).`,
-        );
-      }
-
-      await QuoteEvent.create(
-        [
-          {
-            quoteId: existing._id,
-            rfqId,
-            version,
-            action: 'REJECTED' as const,
-            actorId: rejecterId,
-            timestamp: rejectedAt,
-            comment,
-          },
-        ],
-        { session },
-      );
-
-      saved = updated;
-    });
-
-    return saved;
-  } finally {
-    await session.endSession();
-  }
+  const at = new Date();
+  return transitionWithAudit({
+    rfqId,
+    version,
+    from: ['PENDING_APPROVAL'],
+    set: { status: 'REJECTED', rejectedBy: rejecterId, rejectedAt: at, rejectionComment: comment },
+    action: 'REJECTED',
+    actorId: rejecterId,
+    at,
+    comment,
+  });
 }
 
 /**
- * Mark an APPROVED or READY_FOR_SALES quote as SENT.
- * Records sentBy/sentAt and writes a SENT QuoteEvent (awaited).
- * The sentById parameter is optional for backward compatibility.
+ * Mark an APPROVED or READY_FOR_SALES quote as SENT. Atomic with the SENT event;
+ * exactly one concurrent request can win.
  */
 export async function markAsSent(
   rfqId: mongoose.Types.ObjectId,
   version: number,
-  sentById?: mongoose.Types.ObjectId,
+  sentById: mongoose.Types.ObjectId,
 ): Promise<IQuote> {
-  const quote = await Quote.findOne({ rfqId, version });
-  if (!quote) throw new QuoteServiceError('QUOTE_NOT_FOUND', `Quote rfqId=${rfqId} v${version} not found`);
-
-  if (quote.status !== 'APPROVED' && quote.status !== 'READY_FOR_SALES') {
+  const existing = await loadQuote(rfqId, version);
+  if (existing.status !== 'APPROVED' && existing.status !== 'READY_FOR_SALES') {
     throw new QuoteServiceError(
       'INVALID_STATUS_TRANSITION',
-      `Only APPROVED or READY_FOR_SALES quotes can be marked as SENT; current status: ${quote.status}`,
+      `Only APPROVED or READY_FOR_SALES quotes can be marked as SENT; current status: ${existing.status}`,
     );
   }
-
-  quote.status = 'SENT';
-  if (sentById) {
-    quote.sentBy = sentById;
-    quote.sentAt = new Date();
-  }
-
-  const session = await mongoose.startSession();
-  try {
-    let saved!: IQuote;
-    await session.withTransaction(async () => {
-      saved = await quote.save({ session });
-      // Status change and SENT audit event commit or roll back together.
-      if (sentById) {
-        await QuoteEvent.create(
-          [
-            {
-              quoteId: quote._id,
-              rfqId,
-              version: quote.version,
-              action: 'SENT' as const,
-              actorId: sentById,
-              timestamp: new Date(),
-            },
-          ],
-          { session },
-        );
-      }
-    });
-    return saved;
-  } finally {
-    await session.endSession();
-  }
+  const at = new Date();
+  return transitionWithAudit({
+    rfqId,
+    version,
+    from: ['APPROVED', 'READY_FOR_SALES'],
+    set: { status: 'SENT', sentBy: sentById, sentAt: at },
+    action: 'SENT',
+    actorId: sentById,
+    at,
+  });
 }
+
 
 /**
  * Retrieve all versions of a quote for an RFQ, ordered oldest first.

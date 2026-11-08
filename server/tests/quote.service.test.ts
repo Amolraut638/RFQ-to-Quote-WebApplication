@@ -307,8 +307,8 @@ describe('Quote immutability enforcement', () => {
       const q = fakeQuote({ status });
       mockFindOne.mockResolvedValue(q);
 
-      await expect(submitForApproval(rfqId, 1)).rejects.toBeInstanceOf(QuoteServiceError);
-      const err = await submitForApproval(rfqId, 1).catch((e) => e as QuoteServiceError);
+      await expect(submitForApproval(rfqId, 1, userId)).rejects.toBeInstanceOf(QuoteServiceError);
+      const err = await submitForApproval(rfqId, 1, userId).catch((e) => e as QuoteServiceError);
       expect(err.code).toBe('QUOTE_IMMUTABLE');
     },
   );
@@ -319,18 +319,21 @@ describe('Quote immutability enforcement', () => {
     mockFindOne.mockResolvedValue(q);
 
     // Should throw INVALID_STATUS_TRANSITION, not QUOTE_IMMUTABLE
-    const err = await submitForApproval(rfqId, 1).catch((e) => e as QuoteServiceError);
+    const err = await submitForApproval(rfqId, 1, userId).catch((e) => e as QuoteServiceError);
     expect(err).toBeInstanceOf(QuoteServiceError);
     expect(err.code).toBe('INVALID_STATUS_TRANSITION');
   });
 
   it('DRAFT can be submitted for approval', async () => {
-    const q = fakeQuote({ status: 'DRAFT' });
+    const q = fakeQuote({ status: 'DRAFT', annualQuotationValue: '26000000.00' });
     mockFindOne.mockResolvedValue(q);
+    (Quote.findOneAndUpdate as ReturnType<typeof vi.fn>).mockImplementation(
+      (_f: unknown, update: { $set: Record<string, unknown> }) =>
+        Promise.resolve({ ...q, ...update.$set }),
+    );
 
-    await submitForApproval(rfqId, 1);
-    expect(q.save).toHaveBeenCalled();
-    expect(q.status).toBe('PENDING_APPROVAL');
+    const result = await submitForApproval(rfqId, 1, userId);
+    expect(result.status).toBe('PENDING_APPROVAL');
   });
 });
 
@@ -390,11 +393,13 @@ describe('rejectQuote', () => {
   it('transitions PENDING_APPROVAL → REJECTED; version remains in history', async () => {
     const q = fakeQuote({ status: 'PENDING_APPROVAL' });
     mockFindOne.mockResolvedValue(q);
+    (Quote.findOneAndUpdate as ReturnType<typeof vi.fn>).mockImplementation(
+      (_f: unknown, update: { $set: Record<string, unknown> }) =>
+        Promise.resolve({ ...q, ...update.$set }),
+    );
 
-    await rejectQuote(rfqId, 1);
-
-    expect(q.status).toBe('REJECTED');
-    expect(q.save).toHaveBeenCalled();
+    const result = await rejectQuote(rfqId, 1, approverId, 'No budget allocated');
+    expect(result.status).toBe('REJECTED');
     // The document is updated but not deleted — preserved in history
   });
 
@@ -402,7 +407,7 @@ describe('rejectQuote', () => {
     const q = fakeQuote({ status: 'APPROVED' });
     mockFindOne.mockResolvedValue(q);
 
-    const err = await rejectQuote(rfqId, 1).catch((e) => e as QuoteServiceError);
+    const err = await rejectQuote(rfqId, 1, approverId, 'No budget').catch((e) => e as QuoteServiceError);
     expect(err.code).toBe('INVALID_STATUS_TRANSITION');
   });
 });
@@ -411,16 +416,20 @@ describe('markAsSent', () => {
   it('transitions APPROVED → SENT', async () => {
     const q = fakeQuote({ status: 'APPROVED' });
     mockFindOne.mockResolvedValue(q);
+    (Quote.findOneAndUpdate as ReturnType<typeof vi.fn>).mockImplementation(
+      (_f: unknown, update: { $set: Record<string, unknown> }) =>
+        Promise.resolve({ ...q, ...update.$set }),
+    );
 
-    await markAsSent(rfqId, 1);
-    expect(q.status).toBe('SENT');
+    const result = await markAsSent(rfqId, 1, userId);
+    expect(result.status).toBe('SENT');
   });
 
   it('throws INVALID_STATUS_TRANSITION if not APPROVED', async () => {
     const q = fakeQuote({ status: 'DRAFT' });
     mockFindOne.mockResolvedValue(q);
 
-    const err = await markAsSent(rfqId, 1).catch((e) => e as QuoteServiceError);
+    const err = await markAsSent(rfqId, 1, userId).catch((e) => e as QuoteServiceError);
     expect(err.code).toBe('INVALID_STATUS_TRANSITION');
   });
 });
