@@ -24,7 +24,9 @@ function handleComparisonError(
   if (err instanceof HistoricalComparisonError) {
     const statusMap: Record<HistoricalComparisonError['code'], number> = {
       INVALID_ID: 400,
+      INVALID_QUERY_PARAM: 400,
       PART_NOT_FOUND: 404,
+      PART_NOT_IN_RFQ: 404,
       QUOTE_NOT_FOUND: 404,
       QUOTE_INELIGIBLE: 422,
       QUOTE_SNAPSHOT_INCOMPLETE: 422,
@@ -64,10 +66,14 @@ export async function listHistoricalQuotesForPartHandler(
 ): Promise<void> {
   try {
     const partId = req.params.id;
-    const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const weightTolerancePct = req.query.weightTolerancePct
-      ? Number(req.query.weightTolerancePct)
-      : undefined;
+    const limit =
+      req.query.limit !== undefined && req.query.limit !== ''
+        ? Number(req.query.limit)
+        : undefined;
+    const weightTolerancePct =
+      req.query.weightTolerancePct !== undefined && req.query.weightTolerancePct !== ''
+        ? Number(req.query.weightTolerancePct)
+        : undefined;
 
     const result = await searchHistoricalQuotesForPart({
       partId,
@@ -123,3 +129,4 @@ export async function compareHistoricalQuoteHandler(
     handleComparisonError(err, res, next);
   }
 }
+

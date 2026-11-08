@@ -103,6 +103,7 @@ import {
   isUsableHistoricalSnapshot,
   ELIGIBLE_HISTORICAL_STATUSES,
 } from '../src/services/historicalQuoteComparison.service';
+import { CompareHistoricalQuoteSchema } from '../src/validators/costing.validator';
 import { authenticate } from '../src/middleware/authenticate';
 import { authorizeRoles } from '../src/middleware/authorizeRoles';
 
@@ -984,5 +985,254 @@ describe('Historical Quote Comparison — Phase 5 Automated Suite', () => {
     // 50,000 * 176.49 = 8,824,500.00 vs 40,000 * 173.83 = 6,953,200.00
     expect(byKey50.annualQuoteValue.currentValue).toBe('8824500.00');
     expect(byKey50.annualQuoteValue.historicalValue).toBe('6953200.00');
+  });
+
+  // 13. Audit: Rejects client-supplied financial result fields (.strict() schema)
+  it('13. rejects client-submitted calculated financial fields in CompareHistoricalQuoteSchema', () => {
+    const validPayload = {
+      rfqId: String(currentRfqId),
+      routingOperations: [
+        { operationName: 'Turning', machine: 'Standard CNC Turning', cycleTimeMinutes: 3.2 },
+      ],
+      tierPercentage: 100 as const,
+    };
+    expect(CompareHistoricalQuoteSchema.safeParse(validPayload).success).toBe(true);
+
+    const injectedPricePayload = {
+      ...validPayload,
+      sellingPriceExGst: '10.00',
+      annualQuotationValue: '1000.00',
+    };
+    expect(CompareHistoricalQuoteSchema.safeParse(injectedPricePayload).success).toBe(false);
+
+    const invalidTierPayload = {
+      ...validPayload,
+      tierPercentage: 75,
+    };
+    expect(CompareHistoricalQuoteSchema.safeParse(invalidTierPayload).success).toBe(false);
+  });
+
+  // 14. Audit: Verifies rfqId belongs to the requested partId before comparison
+  it('14. rejects compareWithHistoricalQuote when supplied rfqId does not belong to target partId', async () => {
+    await expect(
+      compareWithHistoricalQuote({
+        partId: String(currentPartId),
+        historicalQuoteId: String(histQuote1Id),
+        currentCostingInput: {
+          rfqId: String(histRfq2Id), // wrong RFQ for currentPartId
+          routingOperations: [
+            { operationName: 'Turning', machine: 'Standard CNC Turning', cycleTimeMinutes: 3.2 },
+          ],
+        },
+      }),
+    ).rejects.toThrow(/does not belong to RFQ/i);
+  });
+
+  // 15. Audit: Verifies historical quote belongs to expected historical part & prevents self-comparison
+  it('15. rejects comparison if historical quote belongs to the same part or has a mismatched partId', async () => {
+    // 15a. Self-comparison against a quote for currentPartId
+    const selfQuoteId = new mongoose.Types.ObjectId();
+    storedQuotes.push({
+      _id: selfQuoteId,
+      rfqId: currentRfqId,
+      partId: currentPartId,
+      version: 1,
+      status: 'APPROVED',
+      createdAt: new Date('2026-10-15T10:00:00Z'),
+      ...buildCompleteSnapshot(),
+    });
+
+    await expect(
+      compareWithHistoricalQuote({
+        partId: String(currentPartId),
+        historicalQuoteId: String(selfQuoteId),
+        currentCostingInput: {
+          rfqId: String(currentRfqId),
+          routingOperations: [
+            { operationName: 'Turning', machine: 'Standard CNC Turning', cycleTimeMinutes: 3.2 },
+          ],
+        },
+      }),
+    ).rejects.toThrow(/belongs to the same part/i);
+
+    // 15b. Historical quote whose partId belongs to a different RFQ than quote.rfqId
+    const mismatchedQuoteId = new mongoose.Types.ObjectId();
+    storedQuotes.push({
+      _id: mismatchedQuoteId,
+      rfqId: histRfq1Id,
+      partId: histPart2Id, // histPart2Id belongs to histRfq2Id, NOT histRfq1Id!
+      version: 9,
+      status: 'APPROVED',
+      createdAt: new Date('2026-10-16T10:00:00Z'),
+      ...buildCompleteSnapshot(),
+    });
+
+    const searchRes = await searchHistoricalQuotesForPart({ partId: String(currentPartId) });
+    expect(searchRes.matches.map((m) => m.quoteId)).not.toContain(String(mismatchedQuoteId));
+
+    await expect(
+      compareWithHistoricalQuote({
+        partId: String(currentPartId),
+        historicalQuoteId: String(mismatchedQuoteId),
+        currentCostingInput: {
+          rfqId: String(currentRfqId),
+          routingOperations: [
+            { operationName: 'Turning', machine: 'Standard CNC Turning', cycleTimeMinutes: 3.2 },
+          ],
+        },
+      }),
+    ).rejects.toThrow(/does not belong to RFQ/i);
+  });
+
+  // 16. Audit: Enforces server-side bounds on limit and weightTolerancePct
+  it('16. rejects invalid limit or weightTolerancePct (<= 0 or NaN) and clamps excessive values', async () => {
+    await expect(
+      searchHistoricalQuotesForPart({ partId: String(currentPartId), limit: 0 }),
+    ).rejects.toThrow(/limit must be a number between 1 and 20/i);
+
+    await expect(
+      searchHistoricalQuotesForPart({ partId: String(currentPartId), limit: -5 }),
+    ).rejects.toThrow(/limit must be a number between 1 and 20/i);
+
+    await expect(
+      searchHistoricalQuotesForPart({ partId: String(currentPartId), weightTolerancePct: 0 }),
+    ).rejects.toThrow(/weightTolerancePct must be a number between 1 and 100/i);
+
+    await expect(
+      searchHistoricalQuotesForPart({ partId: String(currentPartId), weightTolerancePct: -10 }),
+    ).rejects.toThrow(/weightTolerancePct must be a number between 1 and 100/i);
+
+    const clamped = await searchHistoricalQuotesForPart({
+      partId: String(currentPartId),
+      limit: 999,
+      weightTolerancePct: 500,
+    });
+    expect(clamped.limit).toBe(20);
+    expect(clamped.weightTolerancePct).toBe(100);
+  });
+
+  // 17. Audit: Handles zero historical values without division-by-zero errors and filters missing 50%/150% tiers
+  it('17. returns percentageDifference: null when historical value is 0.00 and filters snapshots missing 50%/150% tiers', async () => {
+    // Snapshot missing 50% and 150% tiers is rejected by isUsableHistoricalSnapshot
+    const partialTierQuote = {
+      ...storedQuotes[0],
+      volumeTierResults: [storedQuotes[0].volumeTierResults[1]], // only 100% tier
+    };
+    expect(isUsableHistoricalSnapshot(partialTierQuote)).toBe(false);
+
+    // Zero historical scrap/packingFreight/margin -> percentageDifference must be null (no NaN/Infinity)
+    const zeroFieldQuoteId = new mongoose.Types.ObjectId();
+    storedQuotes.push({
+      _id: zeroFieldQuoteId,
+      rfqId: histRfq1Id,
+      partId: histPart1Id,
+      version: 5,
+      status: 'APPROVED',
+      createdAt: new Date('2026-10-18T10:00:00Z'),
+      ...buildCompleteSnapshot({
+        scrapPct: 0,
+        scrapCost: '0.00',
+        packingFreight: '0.00',
+        marginPct: 0,
+      }),
+    });
+
+    mockPreviewCosting.mockResolvedValue({
+      rfqId: String(currentRfqId),
+      partId: String(currentPartId),
+      costingDate: '2026-11-08T00:00:00.000Z',
+      costingInput: {
+        grossWeightKg: '0.65',
+        annualVolume: 100000,
+        materialRatePerKg: '55.00',
+        operations: [
+          {
+            operationName: 'Turning',
+            machine: 'Standard CNC Turning',
+            cycleTimeMinutes: '3.2',
+            machineHourRate: '850.00',
+          },
+        ],
+        scrapPct: '5',
+        overheadPct: '150',
+        packingFreight: '2.50',
+        setupCostPerPart: '5000.00',
+        defaultMarginPct: '15',
+        gstPct: '18',
+      },
+      breakdown: {
+        materialCost: '35.75',
+        scrapCost: '1.79',
+        conversionCost: '45.33',
+        overheadCost: '68.00',
+        packingFreight: '2.50',
+        baseManufacturingCost: '150.87',
+        setupAllocationPerPiece: '0.05',
+        totalCost: '153.42',
+        sellingPriceExGst: '176.43',
+        gstAmount: '31.76',
+        sellingPriceIncludingGst: '208.19',
+      },
+      volumeTiers: [
+        {
+          tierName: '50% Volume',
+          tierPercentage: 50,
+          tierVolume: 50000,
+          setupAllocationPerPiece: '0.10',
+          totalCostPerPiece: '153.47',
+          sellingPriceExGst: '176.49',
+          gstAmount: '31.77',
+          sellingPriceIncludingGst: '208.26',
+        },
+        {
+          tierName: '100% Volume',
+          tierPercentage: 100,
+          tierVolume: 100000,
+          setupAllocationPerPiece: '0.05',
+          totalCostPerPiece: '153.42',
+          sellingPriceExGst: '176.43',
+          gstAmount: '31.76',
+          sellingPriceIncludingGst: '208.19',
+        },
+        {
+          tierName: '150% Volume',
+          tierPercentage: 150,
+          tierVolume: 150000,
+          setupAllocationPerPiece: '0.03',
+          totalCostPerPiece: '153.40',
+          sellingPriceExGst: '176.41',
+          gstAmount: '31.75',
+          sellingPriceIncludingGst: '208.16',
+        },
+      ],
+      annualQuotationValue: '17643000.00',
+      requiresApproval: true,
+      suggestedStatus: 'PENDING_APPROVAL',
+    });
+
+    const compZero = await compareWithHistoricalQuote({
+      partId: String(currentPartId),
+      historicalQuoteId: String(zeroFieldQuoteId),
+      currentCostingInput: {
+        rfqId: String(currentRfqId),
+        routingOperations: [
+          { operationName: 'Turning', machine: 'Standard CNC Turning', cycleTimeMinutes: 3.2 },
+        ],
+      },
+      tierPercentage: 100,
+    });
+
+    const byKeyZero = Object.fromEntries(compZero.rows.map((r) => [r.key, r]));
+    expect(byKeyZero.scrap.historicalValue).toBe('0.00');
+    expect(byKeyZero.scrap.absoluteDifference).toBe('1.79');
+    expect(byKeyZero.scrap.percentageDifference).toBeNull();
+
+    expect(byKeyZero.packingFreight.historicalValue).toBe('0.00');
+    expect(byKeyZero.packingFreight.absoluteDifference).toBe('2.50');
+    expect(byKeyZero.packingFreight.percentageDifference).toBeNull();
+
+    expect(byKeyZero.margin.historicalValue).toBe('0.00');
+    expect(byKeyZero.margin.absoluteDifference).toBe('15.00');
+    expect(byKeyZero.margin.percentageDifference).toBeNull();
   });
 });

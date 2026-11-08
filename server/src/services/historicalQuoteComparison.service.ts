@@ -37,15 +37,46 @@ const D = Decimal.clone({
 function toDec(val: unknown): Decimal {
   if (val === null || val === undefined) return new D(0);
   if (typeof val === 'number') return new D(Number.isFinite(val) ? val : 0);
-  if (typeof val === 'string') {
-    const cleaned = val.trim();
-    return cleaned ? new D(cleaned) : new D(0);
-  }
-  if (typeof (val as { toString?: () => string }).toString === 'function') {
-    const s = (val as { toString: () => string }).toString().trim();
-    return s ? new D(s) : new D(0);
+  try {
+    if (typeof val === 'string') {
+      const cleaned = val.trim();
+      return cleaned ? new D(cleaned) : new D(0);
+    }
+    if (typeof (val as { toString?: () => string }).toString === 'function') {
+      const s = (val as { toString: () => string }).toString().trim();
+      return s ? new D(s) : new D(0);
+    }
+  } catch {
+    return new D(0);
   }
   return new D(0);
+}
+
+function isPositiveFiniteDecimal(val: unknown): boolean {
+  try {
+    const d = toDec(val);
+    return d.isFinite() && d.greaterThan(0);
+  } catch {
+    return false;
+  }
+}
+
+function isNonNegativeFiniteDecimal(val: unknown): boolean {
+  try {
+    const d = toDec(val);
+    return d.isFinite() && d.greaterThanOrEqualTo(0);
+  } catch {
+    return false;
+  }
+}
+
+function toIsoDateStringSafe(val: unknown, fallback?: Date): string {
+  const candidate = val ? new Date(val as string | number | Date) : fallback ?? new Date(0);
+  if (!Number.isNaN(candidate.getTime())) {
+    return candidate.toISOString();
+  }
+  const fb = fallback && !Number.isNaN(new Date(fallback).getTime()) ? new Date(fallback) : new Date(0);
+  return fb.toISOString();
 }
 
 function toMoneyStr(d: Decimal): string {
@@ -76,7 +107,9 @@ function computeDiff(currentVal: unknown, historicalVal: unknown): {
 
 export type HistoricalComparisonErrorCode =
   | 'INVALID_ID'
+  | 'INVALID_QUERY_PARAM'
   | 'PART_NOT_FOUND'
+  | 'PART_NOT_IN_RFQ'
   | 'QUOTE_NOT_FOUND'
   | 'QUOTE_INELIGIBLE'
   | 'QUOTE_SNAPSHOT_INCOMPLETE'
@@ -102,7 +135,11 @@ export const ELIGIBLE_HISTORICAL_STATUSES: readonly QuoteStatus[] = [
 ];
 
 export const DEFAULT_WEIGHT_TOLERANCE_PCT = 35;
+export const MIN_WEIGHT_TOLERANCE_PCT = 1;
+export const MAX_WEIGHT_TOLERANCE_PCT = 100;
 export const DEFAULT_MAX_RESULTS = 5;
+export const MIN_RESULTS = 1;
+export const MAX_RESULTS = 20;
 
 export function isUsableHistoricalSnapshot(quote: Partial<IQuote> | null | undefined): boolean {
   if (!quote) return false;
@@ -114,26 +151,60 @@ export function isUsableHistoricalSnapshot(quote: Partial<IQuote> | null | undef
   const tiers = quote.volumeTierResults;
 
   if (!rs || !cis || !cb || !Array.isArray(tiers) || tiers.length === 0) return false;
-  if (!rs.material || rs.materialRatePerKg === undefined || rs.materialRatePerKg === null) {
+  if (!rs.material || !isPositiveFiniteDecimal(rs.materialRatePerKg)) {
     return false;
   }
   if (!Array.isArray(cis.routingOperations) || cis.routingOperations.length === 0) {
     return false;
   }
-  if (!cis.annualVolume || cis.annualVolume <= 0) return false;
   if (
-    cb.materialCost === undefined ||
-    cb.scrapCost === undefined ||
-    cb.conversionCost === undefined ||
-    cb.overheadCost === undefined ||
-    cb.packingFreight === undefined ||
-    cb.totalCost === undefined ||
-    cb.sellingPriceExGst === undefined
+    typeof cis.annualVolume !== 'number' ||
+    !Number.isFinite(cis.annualVolume) ||
+    cis.annualVolume <= 0
   ) {
     return false;
   }
-  const hasBaseTier = tiers.some((t) => t.tierPercentage === 100 && !!t.sellingPriceExGst);
-  if (!hasBaseTier) return false;
+  if (
+    typeof rs.scrapPct !== 'number' ||
+    !Number.isFinite(rs.scrapPct) ||
+    typeof rs.overheadPct !== 'number' ||
+    !Number.isFinite(rs.overheadPct) ||
+    typeof rs.marginPct !== 'number' ||
+    !Number.isFinite(rs.marginPct) ||
+    typeof rs.gstPct !== 'number' ||
+    !Number.isFinite(rs.gstPct) ||
+    !isNonNegativeFiniteDecimal(rs.packingFreight) ||
+    !isNonNegativeFiniteDecimal(rs.setupCostPerPart)
+  ) {
+    return false;
+  }
+  if (
+    !isNonNegativeFiniteDecimal(cb.materialCost) ||
+    !isNonNegativeFiniteDecimal(cb.scrapCost) ||
+    !isNonNegativeFiniteDecimal(cb.conversionCost) ||
+    !isNonNegativeFiniteDecimal(cb.overheadCost) ||
+    !isNonNegativeFiniteDecimal(cb.packingFreight) ||
+    !isNonNegativeFiniteDecimal(cb.totalCost) ||
+    !isPositiveFiniteDecimal(cb.sellingPriceExGst)
+  ) {
+    return false;
+  }
+
+  // All 3 standard volume tiers (50%, 100%, 150%) must be present and valid
+  for (const requiredTierPct of [50, 100, 150]) {
+    const tier = tiers.find((t) => t && t.tierPercentage === requiredTierPct);
+    if (
+      !tier ||
+      typeof tier.tierVolume !== 'number' ||
+      !Number.isFinite(tier.tierVolume) ||
+      tier.tierVolume <= 0 ||
+      !isNonNegativeFiniteDecimal(tier.setupAllocationPerPiece) ||
+      !isNonNegativeFiniteDecimal(tier.totalCostPerPiece) ||
+      !isPositiveFiniteDecimal(tier.sellingPriceExGst)
+    ) {
+      return false;
+    }
+  }
 
   return true;
 }
@@ -339,7 +410,7 @@ export function scoreHistoricalCandidate(
 function resolvePartForQuote(quote: IQuote, rfqParts: IPart[]): IPart | null {
   if (quote.partId) {
     const byId = rfqParts.find((p) => String(p._id) === String(quote.partId));
-    if (byId) return byId;
+    return byId ?? null;
   }
   if (rfqParts.length === 1) return rfqParts[0];
 
@@ -370,6 +441,13 @@ export function buildHistoricalQuoteMatch(
   const snapWeight = Number(toDec(cis.grossWeightKg).toNumber());
   const partWeightKg = snapWeight > 0 ? snapWeight : histPart?.grossWeightKg ?? 0;
 
+  // Base 100% tier annual quotation value = 100% sellingPriceExGst * snapshot annualVolume
+  const baseTier = quote.volumeTierResults.find((t) => t.tierPercentage === 100);
+  const basePriceExGst = toDec(baseTier?.sellingPriceExGst ?? cb.sellingPriceExGst);
+  const rawAnnualVal = toDec(quote.annualQuotationValue ?? quote.totalAnnualValue);
+  const computedBaseAnnualVal = basePriceExGst.times(cis.annualVolume);
+  const effectiveAnnualVal = rawAnnualVal.greaterThan(0) ? rawAnnualVal : computedBaseAnnualVal;
+
   return {
     quoteId: String(quote._id),
     partId: histPart ? String(histPart._id) : quote.partId ? String(quote.partId) : null,
@@ -382,16 +460,17 @@ export function buildHistoricalQuoteMatch(
     rfqId: String(rfq._id),
     rfqNo: rfq.rfqNo,
     quoteVersion: quote.version,
-    quoteDate: (quote.costingDate ?? quote.createdAt).toISOString(),
+    quoteDate: toIsoDateStringSafe(quote.costingDate, quote.createdAt),
     historicalQuoteStatus: quote.status,
     historicalMaterialRate: toMoneyStr(toDec(rs.materialRatePerKg)),
     historicalMachineRates: (rs.operations ?? []).map((op) => ({
       operationName: op.operationName,
       machine: op.machine,
       machineHourRate: toMoneyStr(toDec(op.machineHourRate)),
-      effectiveFrom: op.machineRateEffectiveFrom
-        ? new Date(op.machineRateEffectiveFrom).toISOString()
-        : new Date(quote.costingDate).toISOString(),
+      effectiveFrom: toIsoDateStringSafe(
+        op.machineRateEffectiveFrom,
+        quote.costingDate ?? quote.createdAt,
+      ),
     })),
     historicalRoutingOperations: (cis.routingOperations ?? []).map((op) => ({
       operationName: op.operationName,
@@ -405,12 +484,10 @@ export function buildHistoricalQuoteMatch(
     historicalGstPct: rs.gstPct,
     historicalPackingFreight: toMoneyStr(toDec(rs.packingFreight)),
     historicalSetupCost: toMoneyStr(toDec(rs.setupCostPerPart)),
-    historicalPricePerPieceExGst: toMoneyStr(toDec(cb.sellingPriceExGst)),
+    historicalPricePerPieceExGst: toMoneyStr(basePriceExGst),
     historicalPricePerPieceIncGst: toMoneyStr(toDec(cb.sellingPriceIncludingGst)),
     historicalAnnualVolume: cis.annualVolume,
-    historicalAnnualQuoteValue: toMoneyStr(
-      toDec(quote.annualQuotationValue ?? quote.totalAnnualValue),
-    ),
+    historicalAnnualQuoteValue: toMoneyStr(effectiveAnnualVal),
     historicalCostBreakdown: cb,
     historicalVolumeTiers: quote.volumeTierResults,
     similarityScore: scoring.score,
@@ -432,11 +509,29 @@ export async function searchHistoricalQuotesForPart(
     throw new HistoricalComparisonError('INVALID_ID', `Invalid partId: "${partId}"`);
   }
 
-  const limit = Math.min(Math.max(Number(options.limit) || DEFAULT_MAX_RESULTS, 1), 20);
-  const weightTolerancePct =
-    options.weightTolerancePct !== undefined && Number(options.weightTolerancePct) > 0
-      ? Number(options.weightTolerancePct)
-      : DEFAULT_WEIGHT_TOLERANCE_PCT;
+  let limit = DEFAULT_MAX_RESULTS;
+  if (options.limit !== undefined) {
+    const rawLimit = Number(options.limit);
+    if (!Number.isFinite(rawLimit) || rawLimit < MIN_RESULTS) {
+      throw new HistoricalComparisonError(
+        'INVALID_QUERY_PARAM',
+        `limit must be a number between ${MIN_RESULTS} and ${MAX_RESULTS}`,
+      );
+    }
+    limit = Math.min(Math.floor(rawLimit), MAX_RESULTS);
+  }
+
+  let weightTolerancePct = DEFAULT_WEIGHT_TOLERANCE_PCT;
+  if (options.weightTolerancePct !== undefined) {
+    const rawTol = Number(options.weightTolerancePct);
+    if (!Number.isFinite(rawTol) || rawTol < MIN_WEIGHT_TOLERANCE_PCT) {
+      throw new HistoricalComparisonError(
+        'INVALID_QUERY_PARAM',
+        `weightTolerancePct must be a number between ${MIN_WEIGHT_TOLERANCE_PCT} and ${MAX_WEIGHT_TOLERANCE_PCT}`,
+      );
+    }
+    weightTolerancePct = Math.min(rawTol, MAX_WEIGHT_TOLERANCE_PCT);
+  }
 
   const targetPart = await Part.findById(partId).lean<IPart>();
   if (!targetPart) {
@@ -494,8 +589,16 @@ export async function searchHistoricalQuotesForPart(
     const rfqParts = partsByRfqId.get(String(quote.rfqId)) ?? [];
     const histPart = resolvePartForQuote(quote, rfqParts);
 
+    // If quote explicitly references a partId that does not belong to quote.rfqId, skip it
+    if (quote.partId && !histPart) {
+      continue;
+    }
+
     // Exclude quotes belonging to the exact same part being costed
-    if (histPart && String(histPart._id) === String(targetPart._id)) {
+    if (
+      (histPart && String(histPart._id) === String(targetPart._id)) ||
+      (quote.partId && String(quote.partId) === String(targetPart._id))
+    ) {
       continue;
     }
 
@@ -636,6 +739,18 @@ export async function compareWithHistoricalQuote(
   if (!targetPart) {
     throw new HistoricalComparisonError('PART_NOT_FOUND', `Part "${partId}" not found`);
   }
+  if (!mongoose.isValidObjectId(currentCostingInput.rfqId)) {
+    throw new HistoricalComparisonError(
+      'INVALID_ID',
+      `Invalid rfqId: "${currentCostingInput.rfqId}"`,
+    );
+  }
+  if (String(targetPart.rfqId) !== String(currentCostingInput.rfqId)) {
+    throw new HistoricalComparisonError(
+      'PART_NOT_IN_RFQ',
+      `Part "${partId}" does not belong to RFQ "${currentCostingInput.rfqId}".`,
+    );
+  }
   if (!histQuote) {
     throw new HistoricalComparisonError(
       'QUOTE_NOT_FOUND',
@@ -672,6 +787,21 @@ export async function compareWithHistoricalQuote(
   }
 
   const histPart = resolvePartForQuote(histQuote, histRfqParts);
+  if (histQuote.partId && !histPart) {
+    throw new HistoricalComparisonError(
+      'QUOTE_SNAPSHOT_INCOMPLETE',
+      `Historical quote "${historicalQuoteId}" references part "${String(histQuote.partId)}" which does not belong to RFQ "${String(histQuote.rfqId)}".`,
+    );
+  }
+  if (
+    (histPart && String(histPart._id) === String(targetPart._id)) ||
+    (histQuote.partId && String(histQuote.partId) === String(targetPart._id))
+  ) {
+    throw new HistoricalComparisonError(
+      'QUOTE_INELIGIBLE',
+      `Historical quote "${historicalQuoteId}" belongs to the same part ("${partId}") currently being costed.`,
+    );
+  }
   const snapWeight = Number(toDec(histQuote.costingInputSnapshot.grossWeightKg).toNumber());
   const scoring = scoreHistoricalCandidate(
     {
@@ -916,3 +1046,4 @@ export async function compareWithHistoricalQuote(
     rows,
   };
 }
+
