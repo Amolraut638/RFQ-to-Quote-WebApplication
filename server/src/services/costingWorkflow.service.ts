@@ -348,10 +348,12 @@ export async function saveQuoteVersion(
     await buildCostingResult(input);
 
   const rfqObjectId = new mongoose.Types.ObjectId(input.rfqId);
+  const partObjectId = new mongoose.Types.ObjectId(input.partId);
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
   const params = {
     rfqId: rfqObjectId,
+    partId: partObjectId,
     createdBy: userObjectId,
     costingDate,
     costingInput,

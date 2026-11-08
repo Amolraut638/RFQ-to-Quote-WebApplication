@@ -57,6 +57,7 @@ export class QuoteServiceError extends Error {
 
 export interface CreateQuoteParams {
   rfqId: mongoose.Types.ObjectId;
+  partId?: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
   costingDate: Date;
   /** Fully assembled CostingInput (rates already looked up and injected). */
@@ -69,6 +70,7 @@ export interface CreateQuoteParams {
 
 export interface ReviseQuoteParams {
   rfqId: mongoose.Types.ObjectId;
+  partId?: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
   costingDate: Date;
   costingInput: CostingInput;
@@ -162,7 +164,7 @@ function assertMutable(quote: IQuote): void {
  * If a non-draft exists a new version is NOT created here — use reviseQuote().
  */
 export async function createQuote(params: CreateQuoteParams): Promise<IQuote> {
-  const { rfqId, createdBy, costingDate, costingInput, costingResult, rateSnapshot } = params;
+  const { rfqId, partId, createdBy, costingDate, costingInput, costingResult, rateSnapshot } = params;
 
   // If a v1 DRAFT exists for this RFQ, return it (idempotent)
   const existing = await Quote.findOne({ rfqId, version: 1, status: 'DRAFT' });
@@ -172,6 +174,7 @@ export async function createQuote(params: CreateQuoteParams): Promise<IQuote> {
 
   const quote = await Quote.create({
     rfqId,
+    ...(partId ? { partId } : {}),
     version: 1,
     status: 'DRAFT',
     totalAnnualValue,
@@ -195,7 +198,7 @@ export async function createQuote(params: CreateQuoteParams): Promise<IQuote> {
  * the new revision is a sibling document, not an edit.
  */
 export async function reviseQuote(params: ReviseQuoteParams): Promise<IQuote> {
-  const { rfqId, createdBy, costingDate, costingInput, costingResult, rateSnapshot } = params;
+  const { rfqId, partId, createdBy, costingDate, costingInput, costingResult, rateSnapshot } = params;
 
   // Find the highest existing version for this RFQ
   const latest = await Quote.findOne({ rfqId }).sort({ version: -1 }).lean();
@@ -205,6 +208,7 @@ export async function reviseQuote(params: ReviseQuoteParams): Promise<IQuote> {
 
   const quote = await Quote.create({
     rfqId,
+    ...(partId ? { partId } : {}),
     version: nextVersion,
     status: 'DRAFT',
     totalAnnualValue,
