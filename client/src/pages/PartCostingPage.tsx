@@ -7,6 +7,9 @@ import {
   RoutingOperationInput,
   CostingFormInputs,
   RoutingSuggestionResult,
+  HistoricalQuoteMatch,
+  HistoricalQuoteComparisonResult,
+  ComparisonRow,
 } from '../types';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -59,6 +62,19 @@ export function PartCostingPage() {
   const [suggestionError, setSuggestionError] = useState('');
   const [suggestionAccepted, setSuggestionAccepted] = useState(false);
 
+  // Historical Quote Comparison state (read-only)
+  const [historicalMatches, setHistoricalMatches] = useState<HistoricalQuoteMatch[]>([]);
+  const [historicalWeightTolPct, setHistoricalWeightTolPct] = useState<number>(35);
+  const [historicalSearchLoading, setHistoricalSearchLoading] = useState(false);
+  const [historicalSearchError, setHistoricalSearchError] = useState('');
+  const [selectedHistoricalQuoteId, setSelectedHistoricalQuoteId] = useState<string | null>(null);
+  const [comparisonTier, setComparisonTier] = useState<50 | 100 | 150>(100);
+  const [comparisonResult, setComparisonResult] = useState<HistoricalQuoteComparisonResult | null>(
+    null,
+  );
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState('');
+
   function loadRoutingSuggestion() {
     if (!partId) return;
     setSuggestionLoading(true);
@@ -68,6 +84,64 @@ export function PartCostingPage() {
       .then((res) => setRoutingSuggestion(res.data.data))
       .catch((err: Error) => setSuggestionError(err.message))
       .finally(() => setSuggestionLoading(false));
+  }
+
+  function loadHistoricalQuotes() {
+    if (!partId) return;
+    setHistoricalSearchLoading(true);
+    setHistoricalSearchError('');
+    partApi
+      .getHistoricalQuotes(partId)
+      .then((res) => {
+        setHistoricalMatches(res.data.data.matches);
+        setHistoricalWeightTolPct(res.data.data.weightTolerancePct);
+      })
+      .catch((err: Error) => setHistoricalSearchError(err.message))
+      .finally(() => setHistoricalSearchLoading(false));
+  }
+
+  async function handleCompareHistoricalQuote(
+    quoteId: string,
+    tierOverride?: 50 | 100 | 150,
+  ) {
+    if (!rfqId || !partId) return;
+    if (!validate()) {
+      setComparisonError(
+        'Please complete valid routing operations and costing inputs above before comparing.',
+      );
+      return;
+    }
+
+    const activeTier = tierOverride ?? comparisonTier;
+    setSelectedHistoricalQuoteId(quoteId);
+    setComparisonTier(activeTier);
+    setComparisonLoading(true);
+    setComparisonError('');
+
+    try {
+      const res = await partApi.compareHistoricalQuote(partId, quoteId, {
+        rfqId,
+        routingOperations: ops.map((op) => ({
+          operationName: op.operationName,
+          machine: op.machine,
+          cycleTimeMinutes: Number(op.cycleTimeMinutes),
+        })),
+        scrapPct: parseFloat(scrapPct),
+        overheadPct: parseFloat(overheadPct),
+        packingFreight: parseFloat(packingFreight),
+        setupCost: parseFloat(setupCost),
+        marginPct: parseFloat(marginPct),
+        gstPct: parseFloat(gstPct),
+        costingDate,
+        tierPercentage: activeTier,
+      });
+      setComparisonResult(res.data.data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Comparison failed';
+      setComparisonError(msg);
+    } finally {
+      setComparisonLoading(false);
+    }
   }
 
   function acceptRoutingSuggestion() {
@@ -112,8 +186,9 @@ export function PartCostingPage() {
           },
         ]);
         void preloadedCycle; // suppress unused warning
-        // Also fetch AI-assisted historical routing suggestion
+        // Also fetch AI-assisted historical routing suggestion & historical quote matches
         loadRoutingSuggestion();
+        loadHistoricalQuotes();
       })
       .catch((err: Error) => setContextError(err.message))
       .finally(() => setLoading(false));
@@ -590,6 +665,439 @@ export function PartCostingPage() {
           <p className="mt-1 text-xs text-gray-400">
             Rates effective on this date will be used for lookup.
           </p>
+        </div>
+      </section>
+
+      {/* HISTORICAL QUOTE COMPARISON (STRICTLY READ-ONLY) */}
+      <section className="bg-white border border-gray-200 rounded-lg">
+        <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Historical Quote Comparison
+              </h2>
+              <Badge variant="gray">Read-Only Snapshot</Badge>
+            </div>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Deterministic match against frozen historical quote snapshots (weight tolerance: ±
+              {historicalWeightTolPct}%). Does not modify current inputs.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={historicalSearchLoading}
+            onClick={loadHistoricalQuotes}
+          >
+            Refresh Matches
+          </Button>
+        </div>
+
+        <div className="px-5 py-4 space-y-5 text-sm">
+          {historicalSearchLoading && (
+            <p className="text-xs text-gray-500">
+              Searching historical quote snapshots for similar parts…
+            </p>
+          )}
+
+          {!historicalSearchLoading && historicalSearchError && (
+            <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+              Failed to load historical quotes: {historicalSearchError}
+            </div>
+          )}
+
+          {!historicalSearchLoading &&
+            !historicalSearchError &&
+            historicalMatches.length === 0 && (
+              <p className="text-xs text-gray-500">
+                No matching historical quotes found for this part&apos;s drawing number, material (
+                {part.material}), weight ({part.grossWeightKg.toFixed(3)} kg), or name.
+              </p>
+            )}
+
+          {!historicalSearchLoading &&
+            !historicalSearchError &&
+            historicalMatches.length > 0 && (
+              <div className="space-y-4">
+                <div className="border border-gray-200 rounded overflow-x-auto">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Historical Part &amp; Drawing</th>
+                        <th>Customer &amp; RFQ</th>
+                        <th>Quote Snapshot</th>
+                        <th>Spec (Material / Wt)</th>
+                        <th className="text-right">100% Price / pc</th>
+                        <th className="text-right">Annual Vol / Value</th>
+                        <th>Match Basis</th>
+                        <th className="text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicalMatches.map((m) => {
+                        const isSelected = selectedHistoricalQuoteId === m.quoteId;
+                        return (
+                          <tr
+                            key={m.quoteId}
+                            className={isSelected ? 'bg-brand-50/50' : undefined}
+                          >
+                            <td>
+                              <div className="font-medium text-gray-900">
+                                {m.historicalPartName}
+                              </div>
+                              <div className="text-xs text-gray-500 font-mono">
+                                {m.drawingNumber ? `Dwg: ${m.drawingNumber}` : 'No Drawing #'}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="text-gray-900">{m.customerName}</div>
+                              <div className="text-xs text-gray-500 font-mono">{m.rfqNo}</div>
+                            </td>
+                            <td>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono font-semibold text-gray-900">
+                                  v{m.quoteVersion}
+                                </span>
+                                <Badge
+                                  variant={
+                                    m.historicalQuoteStatus === 'APPROVED' ||
+                                    m.historicalQuoteStatus === 'SENT'
+                                      ? 'green'
+                                      : m.historicalQuoteStatus === 'READY_FOR_SALES'
+                                      ? 'blue'
+                                      : 'yellow'
+                                  }
+                                >
+                                  {m.historicalQuoteStatus}
+                                </Badge>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {new Date(m.quoteDate).toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="font-medium text-gray-900">{m.material}</div>
+                              <div className="text-xs text-gray-500 tabular">
+                                {m.partWeightKg.toFixed(3)} kg
+                              </div>
+                            </td>
+                            <td className="text-right tabular font-medium text-gray-900">
+                              ₹
+                              {parseFloat(m.historicalPricePerPieceExGst).toLocaleString('en-IN', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td className="text-right tabular">
+                              <div className="text-gray-900">
+                                {m.historicalAnnualVolume.toLocaleString('en-IN')} pcs
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                ₹
+                                {parseFloat(m.historicalAnnualQuoteValue).toLocaleString('en-IN', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="flex flex-wrap gap-1 max-w-xs">
+                                {m.matchFlags.exactDrawingMatch && (
+                                  <Badge variant="green">Exact Drawing</Badge>
+                                )}
+                                {m.matchFlags.sameMaterial && (
+                                  <Badge variant="blue">Same Material</Badge>
+                                )}
+                                {m.matchFlags.similarWeight && (
+                                  <Badge variant="yellow">
+                                    Wt Δ {m.weightDifferencePct.toFixed(1)}%
+                                  </Badge>
+                                )}
+                                {m.matchFlags.similarName && (
+                                  <Badge variant="default">Similar Name</Badge>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-gray-500 mt-1">
+                                {m.matchReasons.join(' · ')}
+                              </p>
+                            </td>
+                            <td className="text-right">
+                              <Button
+                                variant={isSelected ? 'primary' : 'secondary'}
+                                size="sm"
+                                loading={comparisonLoading && isSelected}
+                                onClick={() => handleCompareHistoricalQuote(m.quoteId)}
+                              >
+                                {isSelected ? 'Refresh Compare' : 'Select & Compare'}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {comparisonError && (
+                  <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+                    {comparisonError}
+                  </div>
+                )}
+
+                {comparisonResult && (
+                  <div className="border border-gray-200 rounded-lg bg-gray-50/60 p-4 space-y-4">
+                    {/* Comparison Header + Volume Tier Switcher */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-900">
+                          Side-by-Side Comparison vs. {comparisonResult.historical.rfqNo} (v
+                          {comparisonResult.historical.quoteVersion} —{' '}
+                          {comparisonResult.historical.historicalPartName})
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                          Customer: {comparisonResult.historical.customerName} · Frozen on{' '}
+                          {new Date(comparisonResult.historical.quoteDate).toLocaleDateString(
+                            'en-IN',
+                            { day: '2-digit', month: 'short', year: 'numeric' },
+                          )}{' '}
+                          · Status: {comparisonResult.historical.historicalQuoteStatus}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-gray-500 mr-1">Compare at Volume Tier:</span>
+                        {([50, 100, 150] as const).map((tier) => (
+                          <Button
+                            key={tier}
+                            size="sm"
+                            variant={comparisonTier === tier ? 'primary' : 'secondary'}
+                            disabled={comparisonLoading}
+                            onClick={() => {
+                              if (selectedHistoricalQuoteId) {
+                                handleCompareHistoricalQuote(selectedHistoricalQuoteId, tier);
+                              }
+                            }}
+                          >
+                            {tier}% Tier
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Equivalence Indicator / Warnings */}
+                    {comparisonResult.isDirectlyEquivalent ? (
+                      <div className="p-2.5 rounded bg-green-50 border border-green-200 text-xs text-green-800 flex items-center gap-2">
+                        <Badge variant="green">Directly Equivalent</Badge>
+                        <span>
+                          Material grade, gross weight, annual volume, and rate percentages match at
+                          the {comparisonResult.tierPercentage}% volume tier.
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-1">
+                        <div className="font-semibold flex items-center gap-2">
+                          <Badge variant="yellow">Equivalence Differences Noted</Badge>
+                          <span>
+                            Comparing at equivalent {comparisonResult.tierPercentage}% volume tier (
+                            {comparisonResult.current.tierVolume.toLocaleString('en-IN')} pcs vs{' '}
+                            {comparisonResult.historical.comparedTierVolume.toLocaleString('en-IN')}{' '}
+                            pcs):
+                          </span>
+                        </div>
+                        <ul className="list-disc list-inside space-y-0.5 pl-1">
+                          {comparisonResult.equivalenceWarnings.map((w, idx) => (
+                            <li key={idx}>{w}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Historical Frozen Snapshot Metadata Summary */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-white border border-gray-200 rounded p-3">
+                      <div className="space-y-1">
+                        <div className="font-semibold text-gray-700 uppercase tracking-wider">
+                          Historical Snapshot Rates (Read-Only)
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600">
+                          <div>
+                            Material ({comparisonResult.historical.material}):{' '}
+                            <span className="font-medium text-gray-900 tabular">
+                              ₹{comparisonResult.historical.historicalMaterialRate}/kg
+                            </span>
+                          </div>
+                          <div>
+                            Part Weight:{' '}
+                            <span className="font-medium text-gray-900 tabular">
+                              {comparisonResult.historical.partWeightKg.toFixed(3)} kg
+                            </span>
+                          </div>
+                          <div>
+                            Scrap %:{' '}
+                            <span className="font-medium text-gray-900 tabular">
+                              {comparisonResult.historical.historicalScrapPct}%
+                            </span>
+                          </div>
+                          <div>
+                            Overhead %:{' '}
+                            <span className="font-medium text-gray-900 tabular">
+                              {comparisonResult.historical.historicalOverheadPct}%
+                            </span>
+                          </div>
+                          <div>
+                            Margin %:{' '}
+                            <span className="font-medium text-gray-900 tabular">
+                              {comparisonResult.historical.historicalMarginPct}%
+                            </span>
+                          </div>
+                          <div>
+                            Setup Cost (Total):{' '}
+                            <span className="font-medium text-gray-900 tabular">
+                              ₹{comparisonResult.historical.historicalSetupCost}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="font-semibold text-gray-700 uppercase tracking-wider">
+                          Historical Routing &amp; Machine Rates
+                        </div>
+                        <div className="space-y-1 max-h-28 overflow-y-auto">
+                          {comparisonResult.historical.historicalRoutingOperations.map(
+                            (op, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between text-gray-700 bg-gray-50 px-2 py-1 rounded"
+                              >
+                                <span>
+                                  {idx + 1}. <strong className="text-gray-900">{op.operationName}</strong>{' '}
+                                  ({op.machine})
+                                </span>
+                                <span className="tabular font-mono text-gray-800">
+                                  {op.cycleTimeMinutes} min @ ₹{op.machineHourRate}/hr
+                                </span>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Side-by-Side Comparison Table */}
+                    <div className="border border-gray-200 rounded bg-white overflow-x-auto">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Parameter</th>
+                            <th className="text-right">Current Costing</th>
+                            <th className="text-right">Historical Quote</th>
+                            <th className="text-right">Absolute Diff</th>
+                            <th className="text-right">% Diff</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {comparisonResult.rows.map((row: ComparisonRow) => {
+                            const absNum = parseFloat(row.absoluteDifference);
+                            const isZero = absNum === 0;
+                            const isHighlightRow =
+                              row.key === 'sellingPricePerPiece' ||
+                              row.key === 'annualQuoteValue';
+
+                            const formatVal = (val: string) => {
+                              const n = parseFloat(val);
+                              if (row.unit === 'PCS') {
+                                return `${Math.round(n).toLocaleString('en-IN')} pcs`;
+                              }
+                              const formatted = n.toLocaleString('en-IN', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              });
+                              if (row.unit === 'PCT') return `${formatted}%`;
+                              return row.unit === 'INR_PER_KG'
+                                ? `₹${formatted}/kg`
+                                : `₹${formatted}`;
+                            };
+
+                            const formatDiff = (val: string) => {
+                              const n = parseFloat(val);
+                              const sign = n > 0 ? '+' : n < 0 ? '-' : '';
+                              const absVal = Math.abs(n);
+                              if (row.unit === 'PCS') {
+                                return `${sign}${Math.round(absVal).toLocaleString('en-IN')} pcs`;
+                              }
+                              const formatted = absVal.toLocaleString('en-IN', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              });
+                              if (row.unit === 'PCT') return `${sign}${formatted}%`;
+                              return row.unit === 'INR_PER_KG'
+                                ? `${sign}₹${formatted}/kg`
+                                : `${sign}₹${formatted}`;
+                            };
+
+                            return (
+                              <tr
+                                key={row.key}
+                                className={
+                                  isHighlightRow ? 'bg-gray-50 font-semibold' : undefined
+                                }
+                              >
+                                <td>
+                                  <span className="text-gray-900">{row.label}</span>
+                                  {row.note && (
+                                    <span className="ml-2 text-xs text-gray-500 font-normal">
+                                      ({row.note})
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="text-right tabular text-gray-900">
+                                  {formatVal(row.currentValue)}
+                                </td>
+                                <td className="text-right tabular text-gray-700">
+                                  {formatVal(row.historicalValue)}
+                                </td>
+                                <td
+                                  className={[
+                                    'text-right tabular font-medium',
+                                    isZero
+                                      ? 'text-gray-500'
+                                      : absNum > 0
+                                      ? 'text-amber-700'
+                                      : 'text-emerald-700',
+                                  ].join(' ')}
+                                >
+                                  {formatDiff(row.absoluteDifference)}
+                                </td>
+                                <td
+                                  className={[
+                                    'text-right tabular font-mono text-xs',
+                                    row.percentageDifference === null || isZero
+                                      ? 'text-gray-400'
+                                      : parseFloat(row.percentageDifference) > 0
+                                      ? 'text-amber-700'
+                                      : 'text-emerald-700',
+                                  ].join(' ')}
+                                >
+                                  {row.percentageDifference === null
+                                    ? 'N/A'
+                                    : `${
+                                        parseFloat(row.percentageDifference) > 0 ? '+' : ''
+                                      }${row.percentageDifference}%`}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
         </div>
       </section>
 

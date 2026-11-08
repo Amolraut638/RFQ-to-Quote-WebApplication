@@ -330,3 +330,115 @@ export interface RoutingSuggestionResult {
   provider: string;
   model: string;
 }
+
+// ─── Historical Quote Comparison ─────────────────────────────────────────────
+
+export interface HistoricalQuoteMatch {
+  quoteId: string;
+  partId: string | null;
+  historicalPartName: string;
+  drawingNumber: string | null;
+  drawingRevision: string | null;
+  material: string;
+  partWeightKg: number;
+  customerName: string;
+  rfqId: string;
+  rfqNo: string;
+  quoteVersion: number;
+  quoteDate: string;
+  historicalQuoteStatus: QuoteStatus;
+  historicalMaterialRate: string;
+  historicalMachineRates: Array<{
+    operationName: string;
+    machine: string;
+    machineHourRate: string;
+    effectiveFrom: string;
+  }>;
+  historicalRoutingOperations: Array<{
+    operationName: string;
+    machine: string;
+    cycleTimeMinutes: number;
+    machineHourRate: string;
+  }>;
+  historicalScrapPct: number;
+  historicalOverheadPct: number;
+  historicalMarginPct: number;
+  historicalGstPct: number;
+  historicalPackingFreight: string;
+  historicalSetupCost: string;
+  historicalPricePerPieceExGst: string;
+  historicalPricePerPieceIncGst: string;
+  historicalAnnualVolume: number;
+  historicalAnnualQuoteValue: string;
+  similarityScore: number;
+  weightDifferencePct: number;
+  withinWeightTolerance: boolean;
+  weightTolerancePct: number;
+  matchFlags: {
+    exactDrawingMatch: boolean;
+    sameMaterial: boolean;
+    similarWeight: boolean;
+    similarName: boolean;
+  };
+  matchReasons: string[];
+}
+
+export interface SearchHistoricalQuotesResponse {
+  targetPart: {
+    _id: string;
+    partName: string;
+    drawingNumber: string | null;
+    material: string;
+    grossWeightKg: number;
+    annualVolume: number;
+  };
+  weightTolerancePct: number;
+  limit: number;
+  matches: HistoricalQuoteMatch[];
+}
+
+export interface ComparisonRow {
+  key: string;
+  label: string;
+  unit: 'INR_PER_KG' | 'INR_PER_PC' | 'INR' | 'PCT' | 'PCS';
+  currentValue: string;
+  historicalValue: string;
+  absoluteDifference: string;
+  percentageDifference: string | null;
+  note?: string;
+}
+
+export interface HistoricalQuoteComparisonResult {
+  tierPercentage: number;
+  isDirectlyEquivalent: boolean;
+  equivalenceWarnings: string[];
+  current: {
+    partId: string;
+    partName: string;
+    material: string;
+    grossWeightKg: number;
+    costingDate: string;
+    annualVolume: number;
+    tierVolume: number;
+    sellingPricePerPieceExGst: string;
+    annualQuoteValue: string;
+  };
+  historical: HistoricalQuoteMatch & {
+    comparedTierVolume: number;
+    comparedTierSellingPriceExGst: string;
+  };
+  priceDelta: {
+    currentPriceExGst: string;
+    historicalPriceExGst: string;
+    absoluteDifference: string;
+    percentageDifference: string | null;
+  };
+  annualValueDelta: {
+    currentAnnualValue: string;
+    historicalAnnualValue: string;
+    absoluteDifference: string;
+    percentageDifference: string | null;
+  };
+  rows: ComparisonRow[];
+}
+

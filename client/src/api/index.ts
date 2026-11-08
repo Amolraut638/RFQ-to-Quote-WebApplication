@@ -15,6 +15,8 @@ import {
   IntakeDraft,
   FieldUpdateAction,
   RoutingSuggestionResult,
+  SearchHistoricalQuotesResponse,
+  HistoricalQuoteComparisonResult,
 } from '../types';
 
 export const authApi = {
@@ -149,4 +151,40 @@ export const intakeApi = {
 export const partApi = {
   getRoutingSuggestions: (partId: string) =>
     api.get<ApiResponse<RoutingSuggestionResult>>(`/api/parts/${partId}/routing-suggestions`),
+
+  getHistoricalQuotes: (
+    partId: string,
+    params?: { limit?: number; weightTolerancePct?: number },
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.weightTolerancePct !== undefined) {
+      query.set('weightTolerancePct', String(params.weightTolerancePct));
+    }
+    const qs = query.toString();
+    return api.get<ApiResponse<SearchHistoricalQuotesResponse>>(
+      `/api/parts/${partId}/historical-quotes${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  compareHistoricalQuote: (
+    partId: string,
+    quoteId: string,
+    body: {
+      rfqId: string;
+      routingOperations: RoutingOperationInput[];
+      scrapPct?: number;
+      overheadPct?: number;
+      packingFreight?: number;
+      setupCost?: number;
+      marginPct?: number;
+      gstPct?: number;
+      costingDate?: string;
+      tierPercentage?: 50 | 100 | 150;
+    },
+  ) =>
+    api.post<ApiResponse<HistoricalQuoteComparisonResult>>(
+      `/api/parts/${partId}/historical-quotes/${quoteId}/compare`,
+      body,
+    ),
 };
