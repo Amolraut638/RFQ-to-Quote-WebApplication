@@ -16,6 +16,7 @@ import rfqRoutes from './routes/rfq.routes';
 import approvalRoutes from './routes/approval.routes';
 import intakeRoutes from './routes/intake.routes';
 import partRoutes from './routes/part.routes';
+import quoteRoutes from './routes/quote.routes';
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/rfqs', rfqRoutes);
 app.use('/api/approvals', approvalRoutes);
 app.use('/api/intake', intakeRoutes);
 app.use('/api/parts', partRoutes);
+app.use('/api/quotes', quoteRoutes);
 // ---------------------------------------------------------------------------
 // 404
 // ---------------------------------------------------------------------------
