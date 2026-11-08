@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { rfqApi } from '../api';
 import { RFQ, RFQStatus } from '../types';
 import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { useAuth } from '../context/AuthContext';
 
 // Map RFQ status to badge variant
 function statusVariant(status: RFQStatus): 'blue' | 'yellow' | 'green' | 'gray' | 'red' {
@@ -39,6 +41,7 @@ function ownerName(ownerId: RFQ['ownerId']): string {
 }
 
 export function RFQListPage() {
+  const { user } = useAuth();
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -61,6 +64,11 @@ export function RFQListPage() {
             All open and active requests for quotation
           </p>
         </div>
+        {user?.role === 'ESTIMATOR' && (
+          <Link to="/intake">
+            <Button size="sm">+ AI-Assisted RFQ Intake</Button>
+          </Link>
+        )}
       </div>
 
       {/* Loading state */}

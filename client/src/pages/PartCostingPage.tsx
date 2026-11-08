@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { costingApi } from '../api';
-import { CostingContext, MachineOption, RoutingOperationInput, CostingFormInputs } from '../types';
+import { costingApi, partApi } from '../api';
+import {
+  CostingContext,
+  MachineOption,
+  RoutingOperationInput,
+  CostingFormInputs,
+  RoutingSuggestionResult,
+} from '../types';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { Badge } from '../components/ui/Badge';
 
 // ─── Routing operation row state ──────────────────────────────────────────────
 
@@ -46,6 +53,36 @@ export function PartCostingPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
 
+  // Historical routing suggestion state
+  const [routingSuggestion, setRoutingSuggestion] = useState<RoutingSuggestionResult | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState('');
+  const [suggestionAccepted, setSuggestionAccepted] = useState(false);
+
+  function loadRoutingSuggestion() {
+    if (!partId) return;
+    setSuggestionLoading(true);
+    setSuggestionError('');
+    partApi
+      .getRoutingSuggestions(partId)
+      .then((res) => setRoutingSuggestion(res.data.data))
+      .catch((err: Error) => setSuggestionError(err.message))
+      .finally(() => setSuggestionLoading(false));
+  }
+
+  function acceptRoutingSuggestion() {
+    if (!routingSuggestion || !routingSuggestion.hasSuggestion) return;
+    setOps(
+      routingSuggestion.suggestedOperations.map((so, idx) => ({
+        id: `sug-${idx}-${Date.now()}`,
+        operationName: so.operationName,
+        machine: so.machine,
+        cycleTimeMinutes: so.cycleTimeMinutes,
+      })),
+    );
+    setSuggestionAccepted(true);
+  }
+
   // Load context on mount
   useEffect(() => {
     if (!rfqId || !partId) return;
@@ -75,6 +112,8 @@ export function PartCostingPage() {
           },
         ]);
         void preloadedCycle; // suppress unused warning
+        // Also fetch AI-assisted historical routing suggestion
+        loadRoutingSuggestion();
       })
       .catch((err: Error) => setContextError(err.message))
       .finally(() => setLoading(false));
@@ -273,6 +312,106 @@ export function PartCostingPage() {
             </dd>
           </div>
         </dl>
+      </section>
+
+      {/* HISTORICAL ROUTING SUGGESTION */}
+      <section className="bg-white border border-gray-200 rounded-lg">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              AI Historical Routing Suggestion
+            </h2>
+            {routingSuggestion && (
+              <span className="text-xs text-gray-400 font-mono">
+                ({routingSuggestion.provider}/{routingSuggestion.model})
+              </span>
+            )}
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={suggestionLoading}
+            onClick={loadRoutingSuggestion}
+          >
+            Refresh Suggestion
+          </Button>
+        </div>
+
+        <div className="px-5 py-4 text-sm space-y-3">
+          {suggestionLoading && (
+            <p className="text-xs text-gray-500">
+              Checking historical parts & quotes for matching material ({part.material})…
+            </p>
+          )}
+
+          {!suggestionLoading && suggestionError && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              Routing suggestion unavailable: {suggestionError}
+            </p>
+          )}
+
+          {!suggestionLoading && !suggestionError && routingSuggestion && (
+            <>
+              {routingSuggestion.hasSuggestion ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <p className="font-medium text-gray-900">
+                        Based on Historical Part:{' '}
+                        <span className="font-semibold">
+                          {routingSuggestion.historicalPartName}
+                        </span>{' '}
+                        (RFQ{' '}
+                        <span className="font-mono">{routingSuggestion.historicalRFQNo}</span>,
+                        Quote{' '}
+                        <span className="font-mono">
+                          v{routingSuggestion.historicalQuoteVersion}
+                        </span>
+                        )
+                      </p>
+                      <p className="text-xs text-gray-600">{routingSuggestion.reason}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {suggestionAccepted && <Badge variant="green">Applied to Routing</Badge>}
+                      <Button size="sm" onClick={acceptRoutingSuggestion}>
+                        {suggestionAccepted
+                          ? 'Re-apply Suggested Routing'
+                          : 'Accept & Prefill Routing'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="border border-gray-200 rounded overflow-hidden">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Suggested Operation</th>
+                          <th>Machine</th>
+                          <th>Historical Cycle Time (min)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {routingSuggestion.suggestedOperations.map((so, idx) => (
+                          <tr key={idx}>
+                            <td className="text-xs text-gray-500">{idx + 1}</td>
+                            <td className="font-medium text-gray-900">{so.operationName}</td>
+                            <td className="text-gray-700">{so.machine}</td>
+                            <td className="tabular font-mono text-gray-900">
+                              {so.cycleTimeMinutes}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">{routingSuggestion.reason}</p>
+              )}
+            </>
+          )}
+        </div>
       </section>
 
       {/* ROUTING OPERATIONS */}

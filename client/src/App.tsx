@@ -7,6 +7,7 @@ import { ApprovalPage } from './pages/ApprovalPage';
 import { QuoteReviewPage } from './pages/QuoteReviewPage';
 import { PartCostingPage } from './pages/PartCostingPage';
 import { CostingResultsPage } from './pages/CostingResultsPage';
+import { IntakePage } from './pages/IntakePage';
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/rfqs" replace />} />
         <Route path="/rfqs" element={<RFQListPage />} />
+        <Route path="/intake" element={<IntakePage />} />
         <Route path="/rfqs/:id" element={<RFQDetailPage />} />
         <Route path="/rfqs/:rfqId/parts/:partId/costing" element={<PartCostingPage />} />
         <Route path="/rfqs/:rfqId/parts/:partId/results" element={<CostingResultsPage />} />

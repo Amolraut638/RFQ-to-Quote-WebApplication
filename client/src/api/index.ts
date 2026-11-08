@@ -11,6 +11,10 @@ import {
   QuoteDetail,
   QuoteEvent,
   PendingApproval,
+  IntakeAIStatus,
+  IntakeDraft,
+  FieldUpdateAction,
+  RoutingSuggestionResult,
 } from '../types';
 
 export const authApi = {
@@ -111,4 +115,38 @@ export const approvalApi = {
   /** POST /api/approvals/:quoteId/reject — body: { comment } */
   reject: (quoteId: string, comment: string) =>
     api.post<ApiResponse<QuoteDetail>>(`/api/approvals/${quoteId}/reject`, { comment }),
+};
+
+export const intakeApi = {
+  getStatus: () =>
+    api.get<ApiResponse<IntakeAIStatus>>('/api/intake/status'),
+
+  extractEmail: (emailText: string, draftId?: string) =>
+    api.post<ApiResponse<IntakeDraft>>('/api/intake/email', { emailText, draftId }),
+
+  uploadFile: (file: File, draftId?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (draftId) formData.append('draftId', draftId);
+    return api.post<ApiResponse<IntakeDraft>>('/api/intake/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  getDraft: (id: string) =>
+    api.get<ApiResponse<IntakeDraft>>(`/api/intake/${id}`),
+
+  patchFields: (id: string, body: { updates: FieldUpdateAction[]; addPart?: boolean }) =>
+    api.patch<ApiResponse<IntakeDraft>>(`/api/intake/${id}/fields`, body),
+
+  commit: (id: string) =>
+    api.post<ApiResponse<{ rfq: RFQ; parts: Part[]; draft: IntakeDraft }>>(
+      `/api/intake/${id}/commit`,
+      {},
+    ),
+};
+
+export const partApi = {
+  getRoutingSuggestions: (partId: string) =>
+    api.get<ApiResponse<RoutingSuggestionResult>>(`/api/parts/${partId}/routing-suggestions`),
 };

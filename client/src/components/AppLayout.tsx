@@ -40,6 +40,7 @@ export function AppLayout() {
 
   const navLinks = [
     { to: '/rfqs', label: 'RFQ Register' },
+    ...(user.role === 'ESTIMATOR' ? [{ to: '/intake', label: 'AI Intake' }] : []),
     ...(user.role === 'SALES_HEAD' ? [{ to: '/approval', label: 'Approvals' }] : []),
   ];
 

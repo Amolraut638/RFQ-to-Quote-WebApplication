@@ -40,6 +40,8 @@ export interface Part {
   grossWeightKg: number;
   annualVolume: number;
   cycleTimeMinutes?: number;
+  drawingNumber?: string;
+  drawingRevision?: string;
 }
 
 export interface ApiResponse<T> {
@@ -239,4 +241,92 @@ export interface PendingApproval {
   createdBy: PopulatedUserRef | string;
   submittedAt?: string;
   createdAt: string;
+}
+
+// ─── Day 5: AI-Assisted RFQ Intake & Routing Suggestions ─────────────────────
+
+export type IntakeSourceType = 'EMAIL' | 'EXCEL' | 'PDF';
+export type FieldStatus = 'PENDING' | 'ACCEPTED' | 'EDITED' | 'REJECTED';
+export type DraftStatus = 'PROCESSING' | 'REVIEW_REQUIRED' | 'READY_TO_COMMIT' | 'COMMITTED' | 'FAILED';
+
+export interface IntakeAIStatus {
+  configured: boolean;
+  provider: string;
+  model: string | null;
+  dataPolicyNotice: string;
+}
+
+export interface IntakeFieldSource {
+  fileName: string;
+  sourceType: IntakeSourceType | 'MANUAL';
+  page: number | null;
+  sheet: string | null;
+  cell: string | null;
+  originalValue: string | null;
+  snippet: string | null;
+}
+
+export interface IntakeDraftField {
+  scope: 'RFQ' | 'PART';
+  partIndex: number;
+  key: string;
+  value: string | number | null;
+  aiValue: string | number | null;
+  source: IntakeFieldSource;
+  method: 'AI' | 'MANUAL';
+  confidence: number | null;
+  verified: boolean;
+  status: FieldStatus;
+}
+
+export interface IntakeDraft {
+  _id: string;
+  createdBy: string;
+  sourceType: IntakeSourceType;
+  sources: Array<{
+    sourceType: IntakeSourceType;
+    fileName: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    pageCount?: number;
+    sheetCount?: number;
+    extractedAt: string;
+  }>;
+  ai: {
+    provider: string;
+    model: string;
+    extractedAt: string;
+  };
+  fields: IntakeDraftField[];
+  partCount: number;
+  status: DraftStatus;
+  readiness: {
+    ready: boolean;
+    missingReasons: string[];
+  };
+  committedRfqId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FieldUpdateAction {
+  scope: 'RFQ' | 'PART';
+  partIndex: number;
+  key: string;
+  action: 'ACCEPT' | 'EDIT' | 'REJECT';
+  value?: string | number | null;
+}
+
+export interface RoutingSuggestionResult {
+  hasSuggestion: boolean;
+  suggestedOperations: RoutingOperationInput[];
+  basedOnPartId: string | null;
+  historicalPartName: string | null;
+  historicalRFQNo: string | null;
+  historicalQuoteVersion: number | null;
+  historicalGrossWeightKg: number | null;
+  historicalMaterial: string | null;
+  reason: string;
+  provider: string;
+  model: string;
 }
