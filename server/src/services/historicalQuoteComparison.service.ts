@@ -261,6 +261,11 @@ export interface HistoricalQuoteMatch {
     similarName: boolean;
   };
   matchReasons: string[];
+  importSource?: 'HISTORICAL_EXCEL' | null;
+  isSyntheticDemo?: boolean;
+  historicalStatedPriceExGst?: string | null;
+  priceDiscrepancyFlag?: boolean;
+  priceDiscrepancyDelta?: string | null;
 }
 
 export interface SearchHistoricalQuotesOptions {
@@ -496,6 +501,17 @@ export function buildHistoricalQuoteMatch(
     weightTolerancePct,
     matchFlags: scoring.matchFlags,
     matchReasons: scoring.matchReasons,
+    importSource: quote.importSource ?? rfq.importSource ?? null,
+    isSyntheticDemo: Boolean(quote.isSyntheticDemo || rfq.isSyntheticDemo),
+    historicalStatedPriceExGst:
+      quote.historicalStatedPriceExGst !== undefined && quote.historicalStatedPriceExGst !== null
+        ? toMoneyStr(toDec(quote.historicalStatedPriceExGst))
+        : null,
+    priceDiscrepancyFlag: Boolean(quote.priceDiscrepancyFlag),
+    priceDiscrepancyDelta:
+      quote.priceDiscrepancyDelta !== undefined && quote.priceDiscrepancyDelta !== null
+        ? toMoneyStr(toDec(quote.priceDiscrepancyDelta))
+        : null,
   };
 }
 

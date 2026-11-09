@@ -37,6 +37,10 @@ export interface IRFQ extends Document {
   outcomeUpdatedAt?: Date;
   sourceEmailText?: string;
   customerContact?: string;
+  /** Provenance marker for historical Excel imports. */
+  importSource?: 'HISTORICAL_EXCEL';
+  importBatchId?: string;
+  isSyntheticDemo?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,6 +75,12 @@ const RFQSchema = new Schema<IRFQ>(
     },
     sourceEmailText: { type: String },
     customerContact: { type: String, trim: true },
+    importSource: {
+      type: String,
+      enum: ['HISTORICAL_EXCEL'],
+    },
+    importBatchId: { type: String, trim: true },
+    isSyntheticDemo: { type: Boolean },
   },
   { timestamps: true }
 );

@@ -173,6 +173,17 @@ export interface IQuote extends Document {
   volumeTierResults: IVolumeTierSnapshot[];
   /** Part-level annual value = base-tier sellingPriceExGst × annualVolume. */
   annualQuotationValue: string;
+  /** Historical Excel import provenance fields (optional; undefined for native quotes). */
+  importSource?: 'HISTORICAL_EXCEL';
+  importBatchId?: string;
+  externalRowKey?: string;
+  isSyntheticDemo?: boolean;
+  /** Preserved verbatim if the historical Excel row stated a selling price. */
+  historicalStatedPriceExGst?: mongoose.Types.Decimal128;
+  /** True when historicalStatedPriceExGst differs from deterministic engine calculation by >= ₹0.01. */
+  priceDiscrepancyFlag?: boolean;
+  /** Difference (historicalStatedPriceExGst - costBreakdown.sellingPriceExGst) when flagged. */
+  priceDiscrepancyDelta?: mongoose.Types.Decimal128;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -290,11 +301,22 @@ const QuoteSchema = new Schema<IQuote>(
     costBreakdown: { type: CostBreakdownSnapshotSchema, required: true },
     volumeTierResults: { type: [VolumeTierSnapshotSchema], required: true },
     annualQuotationValue: { type: String, required: true },
+    importSource: {
+      type: String,
+      enum: ['HISTORICAL_EXCEL'],
+    },
+    importBatchId: { type: String, trim: true },
+    externalRowKey: { type: String, trim: true },
+    isSyntheticDemo: { type: Boolean },
+    historicalStatedPriceExGst: { type: mongoose.Schema.Types.Decimal128 },
+    priceDiscrepancyFlag: { type: Boolean },
+    priceDiscrepancyDelta: { type: mongoose.Schema.Types.Decimal128 },
   },
   { timestamps: true },
 );
 
 // No two versions of the same RFQ can share a version number.
 QuoteSchema.index({ rfqId: 1, version: 1 }, { unique: true });
+QuoteSchema.index({ externalRowKey: 1 }, { unique: true, sparse: true });
 
 export const Quote = mongoose.model<IQuote>('Quote', QuoteSchema);

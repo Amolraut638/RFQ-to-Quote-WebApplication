@@ -7,6 +7,12 @@ import * as RFQService from '../services/rfq.service';
 import { RFQServiceError } from '../services/rfq.service';
 import { CreateRFQSchema, UpdateRFQOutcomeSchema } from '../validators/rfq.validator';
 import { createPart, CreatePartSchema, PartServiceError } from '../services/part.service';
+import {
+  importHistoricalQuotesFromBuffer,
+  generateHistoricalImportTemplateBuffer,
+  generateSynthetic1400HistoricalWorkbookBuffer,
+  HistoricalImportError,
+} from '../services/historicalImport.service';
 
 export async function listRFQs(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -128,5 +134,108 @@ export async function updateRFQOutcomeHandler(
     next(err);
   }
 }
+
+/**
+ * GET /api/rfqs/historical-import/template
+ * Downloads the canonical Excel template for historical quote imports.
+ */
+export async function downloadHistoricalTemplateHandler(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const buffer = generateHistoricalImportTemplateBuffer();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="Historical-Quotes-Import-Template.xlsx"',
+    );
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/rfqs/historical-import/synthetic-demo
+ * Downloads the 1,400-row synthetic Chakan automotive historical quotes workbook.
+ */
+export async function downloadSyntheticDemoWorkbookHandler(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const buffer = generateSynthetic1400HistoricalWorkbookBuffer();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="Synthetic-1400-Historical-Quotes-Demo.xlsx"',
+    );
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/rfqs/historical-import
+ * Parses, validates, and (unless dryRun=true) imports historical quotes from an Excel/CSV file
+ * or the built-in 1,400-row synthetic demo dataset (when useSyntheticDemo=true).
+ */
+export async function importHistoricalQuotesHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const dryRunParam = req.query.dryRun ?? req.body?.dryRun;
+    const dryRun =
+      dryRunParam === true ||
+      dryRunParam === 'true' ||
+      dryRunParam === '1';
+
+    const useSyntheticParam = req.query.useSyntheticDemo ?? req.body?.useSyntheticDemo;
+    const useSyntheticDemo =
+      useSyntheticParam === true ||
+      useSyntheticParam === 'true' ||
+      useSyntheticParam === '1';
+
+    let buffer: Buffer | undefined = req.file?.buffer;
+    if (!buffer && useSyntheticDemo) {
+      buffer = generateSynthetic1400HistoricalWorkbookBuffer();
+    }
+
+    if (!buffer || buffer.length === 0) {
+      res.status(400).json({
+        error: 'Please upload an Excel (.xlsx/.xls) or CSV file, or select the 1,400-row synthetic demo dataset.',
+        code: 'MISSING_FILE',
+      });
+      return;
+    }
+
+    const summary = await importHistoricalQuotesFromBuffer({
+      buffer,
+      actorId: req.user!.id,
+      dryRun,
+    });
+
+    res.json({ success: true, data: summary });
+  } catch (err) {
+    if (err instanceof HistoricalImportError) {
+      res.status(err.statusCode).json({ error: err.message, code: err.code });
+      return;
+    }
+    next(err);
+  }
+}
+
 
 

@@ -84,6 +84,9 @@ export interface RFQListItem {
   latestQuoteVersion: number | null;
   /** True if at least one quote version for this RFQ has been marked SENT. */
   hasSentQuote: boolean;
+  importSource?: 'HISTORICAL_EXCEL';
+  importBatchId?: string;
+  isSyntheticDemo?: boolean;
 }
 
 export interface UpdateRFQOutcomeParams {
