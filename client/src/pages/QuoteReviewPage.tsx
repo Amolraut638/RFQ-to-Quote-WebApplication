@@ -15,6 +15,16 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle,
+  CheckCircle2,
+  Download,
+  Send,
+  XCircle,
+} from 'lucide-react';
 import { approvalApi, costingApi } from '../api';
 import {
   QuoteDetail,
@@ -352,8 +362,9 @@ export function QuoteReviewPage() {
   // ── Access guard ────────────────────────────────────────────────────────────
   if (user?.role !== 'SALES_HEAD') {
     return (
-      <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-        Access denied. Sales Head only.
+      <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+        <span>Access denied. Sales Head only.</span>
       </div>
     );
   }
@@ -368,8 +379,9 @@ export function QuoteReviewPage() {
 
   if (error) {
     return (
-      <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-        Failed to load quote: {error}
+      <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+        <span>Failed to load quote: {error}</span>
       </div>
     );
   }
@@ -393,9 +405,10 @@ export function QuoteReviewPage() {
       {/* Breadcrumb */}
       <button
         onClick={() => navigate('/approval')}
-        className="text-sm text-brand-600 hover:underline"
+        className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
       >
-        ← Approval Queue
+        <ArrowLeft className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+        <span>Approval Queue</span>
       </button>
 
       {/* Header */}
@@ -415,9 +428,10 @@ export function QuoteReviewPage() {
               <span className="text-gray-300">·</span>
               <Link
                 to={`/rfqs/${rfqRef._id}`}
-                className="text-brand-600 hover:underline text-xs font-medium"
+                className="inline-flex items-center gap-1 text-brand-600 hover:underline text-xs font-medium"
               >
-                View RFQ &amp; Compare Versions →
+                <span>View RFQ &amp; Compare Versions</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
               </Link>
             </div>
           )}
@@ -432,7 +446,8 @@ export function QuoteReviewPage() {
               loading={downloading}
               onClick={handleDownloadPdf}
             >
-              ↓ Download PDF
+              <Download className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+              <span>Download PDF</span>
             </Button>
           )}
           {canMarkSent && (
@@ -442,7 +457,8 @@ export function QuoteReviewPage() {
               loading={sending}
               onClick={handleMarkSent}
             >
-              Mark as Sent
+              <Send className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+              <span>Mark as Sent</span>
             </Button>
           )}
           {canApproveReject && !showRejectForm && (
@@ -452,7 +468,8 @@ export function QuoteReviewPage() {
                 size="sm"
                 onClick={() => setShowRejectForm(true)}
               >
-                Reject
+                <XCircle className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                <span>Reject</span>
               </Button>
               <Button
                 variant="primary"
@@ -460,7 +477,8 @@ export function QuoteReviewPage() {
                 loading={approving}
                 onClick={handleApprove}
               >
-                Approve
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                <span>Approve</span>
               </Button>
             </>
           )}
@@ -469,13 +487,15 @@ export function QuoteReviewPage() {
 
       {/* Feedback banners */}
       {actionError && (
-        <div className="p-3 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-          {actionError}
+        <div className="p-3 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+          <span>{actionError}</span>
         </div>
       )}
       {actionSuccess && (
-        <div className="p-3 rounded bg-green-50 border border-green-200 text-sm text-green-700">
-          ✓ {actionSuccess}
+        <div className="p-3 rounded bg-green-50 border border-green-200 text-sm text-green-700 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-700 shrink-0" strokeWidth={1.8} />
+          <span>{actionSuccess}</span>
         </div>
       )}
 

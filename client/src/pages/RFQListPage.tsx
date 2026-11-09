@@ -1,5 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  Clock,
+  Download,
+  FileText,
+  Info,
+  Send,
+  Sparkles,
+  TrendingDown,
+  Trophy,
+  Upload,
+  X,
+} from 'lucide-react';
 import { rfqApi } from '../api';
 import {
   HistoricalImportSummary,
@@ -42,6 +57,20 @@ function statusVariant(status: RFQStatus): 'blue' | 'yellow' | 'green' | 'gray' 
       return 'green';
     case 'LOST':
       return 'red';
+  }
+}
+
+function statusIcon(status: RFQStatus) {
+  switch (status) {
+    case 'ESTIMATING':
+    case 'PENDING_APPROVAL':
+      return <Clock className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+    case 'SENT':
+      return <Send className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+    case 'WON':
+      return <Trophy className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+    case 'LOST':
+      return <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
   }
 }
 
@@ -307,11 +336,19 @@ export function RFQListPage() {
             variant={showImportPanel ? 'primary' : 'secondary'}
             onClick={() => setShowImportPanel((prev) => !prev)}
           >
-            {showImportPanel ? 'Hide Historical Excel Import' : 'Import Historical Quotes (Excel)'}
+            <Upload className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+            <span>
+              {showImportPanel
+                ? 'Hide Historical Excel Import'
+                : 'Import Historical Quotes (Excel)'}
+            </span>
           </Button>
           {user?.role === 'ESTIMATOR' && (
             <Link to="/intake">
-              <Button size="sm">+ AI-Assisted RFQ Intake</Button>
+              <Button size="sm">
+                <Sparkles className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+                <span>AI-Assisted RFQ Intake</span>
+              </Button>
             </Link>
           )}
         </div>
@@ -336,30 +373,36 @@ export function RFQListPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" variant="secondary" onClick={() => void handleDownloadTemplate()}>
-                Download Template (.xlsx)
+                <Download className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                <span>Download Template (.xlsx)</span>
               </Button>
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => void handleDownloadSyntheticDemo()}
               >
-                Download 1,400-Row Synthetic Demo (.xlsx)
+                <Download className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                <span>Download 1,400-Row Synthetic Demo (.xlsx)</span>
               </Button>
             </div>
           </div>
 
-          <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-900">
-            <span className="font-semibold">Data Provenance Notice:</span> The built-in 1,400-row
-            Chakan automotive dataset is{' '}
-            <span className="font-mono font-semibold">SYNTHETIC DEMO DATA</span> generated for
-            demonstration and testing (1,340 complete quotes including 25 price-discrepancy rows,
-            25 intra-file duplicates, 25 incomplete legacy rows, and 10 validation-error rows). It
-            is never presented as actual customer NDA data.
+          <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+            <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" strokeWidth={1.8} />
+            <div>
+              <span className="font-semibold">Data Provenance Notice:</span> The built-in 1,400-row
+              Chakan automotive dataset is{' '}
+              <span className="font-mono font-semibold">SYNTHETIC DEMO DATA</span> generated for
+              demonstration and testing (1,340 complete quotes including 25 price-discrepancy rows,
+              25 intra-file duplicates, 25 incomplete legacy rows, and 10 validation-error rows). It
+              is never presented as actual customer NDA data.
+            </div>
           </div>
 
           {importError && (
-            <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-              {importError}
+            <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+              <span>{importError}</span>
             </div>
           )}
 
@@ -604,14 +647,20 @@ export function RFQListPage() {
 
       {/* Action error banner */}
       {actionError && (
-        <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center justify-between">
-          <span>{actionError}</span>
+        <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+            <span>{actionError}</span>
+          </div>
           <button
             type="button"
             onClick={() => setActionError('')}
-            className="text-red-500 hover:text-red-700 font-medium ml-4"
+            aria-label="Dismiss error"
+            title="Dismiss error"
+            className="inline-flex items-center gap-1 text-red-500 hover:text-red-700 font-medium ml-4"
           >
-            Dismiss
+            <X className="w-3.5 h-3.5" strokeWidth={1.8} />
+            <span>Dismiss</span>
           </button>
         </div>
       )}
@@ -625,22 +674,27 @@ export function RFQListPage() {
 
       {/* Error state */}
       {!loading && error && (
-        <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-          Failed to load RFQs: {error}
+        <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+          <span>Failed to load RFQs: {error}</span>
         </div>
       )}
 
       {/* Empty state (no RFQs in system) */}
       {!loading && !error && rfqs.length === 0 && (
         <div className="text-center py-20 text-sm text-gray-400 bg-white border border-gray-200 rounded-lg">
-          No RFQs found. Create one to get started.
+          <FileText className="w-6 h-6 text-gray-300 mx-auto mb-2" strokeWidth={1.8} />
+          <p>No RFQs found. Create one to get started.</p>
         </div>
       )}
 
       {/* Empty state for active filter */}
       {!loading && !error && rfqs.length > 0 && filteredRfqs.length === 0 && (
         <div className="text-center py-14 text-sm text-gray-400 bg-white border border-gray-200 rounded-lg">
-          No RFQs match the <span className="font-medium text-gray-600">{filter}</span> filter.
+          <FileText className="w-6 h-6 text-gray-300 mx-auto mb-2" strokeWidth={1.8} />
+          <p>
+            No RFQs match the <span className="font-medium text-gray-600">{filter}</span> filter.
+          </p>
         </div>
       )}
 
@@ -713,13 +767,17 @@ export function RFQListPage() {
                           {formatDate(rfq.dueDate)}
                         </span>
                         {rfq.isOverdue && (
-                          <span className="ml-2 text-xs text-red-500 font-medium">Overdue</span>
+                          <span className="ml-2 inline-flex items-center gap-0.5 text-xs text-red-500 font-medium">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                            <span>Overdue</span>
+                          </span>
                         )}
                       </td>
                       <td>
                         <div className="flex flex-col items-start gap-0.5">
                           <Badge variant={statusVariant(rfq.status)}>
-                            {statusLabel(rfq.status)}
+                            {statusIcon(rfq.status)}
+                            <span>{statusLabel(rfq.status)}</span>
                           </Badge>
                           {rfq.status === 'LOST' && rfq.lostReason && (
                             <span
@@ -762,7 +820,8 @@ export function RFQListPage() {
                                 onClick={() => void handleMarkWon(rfq)}
                                 className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
                               >
-                                {isBusy ? 'Saving…' : 'Mark Won'}
+                                <Trophy className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                                <span>{isBusy ? 'Saving…' : 'Mark Won'}</span>
                               </Button>
                               <Button
                                 size="sm"
@@ -771,15 +830,17 @@ export function RFQListPage() {
                                 onClick={() => openLostModal(rfq)}
                                 className="text-red-700 border-red-300 hover:bg-red-50"
                               >
-                                Mark Lost
+                                <TrendingDown className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                                <span>Mark Lost</span>
                               </Button>
                             </>
                           )}
                           <Link
                             to={`/rfqs/${rfq._id}`}
-                            className="text-xs text-brand-600 hover:text-brand-700 font-medium ml-1"
+                            className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium ml-1"
                           >
-                            View →
+                            <span>View</span>
+                            <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
                           </Link>
                         </div>
                       </td>

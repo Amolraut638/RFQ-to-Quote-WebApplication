@@ -6,6 +6,7 @@
  */
 
 import { Navigate, Outlet, Link, useLocation } from 'react-router-dom';
+import { Calculator, ClipboardCheck, FileText, Sparkles, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -39,9 +40,11 @@ export function AppLayout() {
   }
 
   const navLinks = [
-    { to: '/rfqs', label: 'RFQ Register' },
-    ...(user.role === 'ESTIMATOR' ? [{ to: '/intake', label: 'AI Intake' }] : []),
-    ...(user.role === 'SALES_HEAD' ? [{ to: '/approval', label: 'Approvals' }] : []),
+    { to: '/rfqs', label: 'RFQ Register', Icon: FileText },
+    ...(user.role === 'ESTIMATOR' ? [{ to: '/intake', label: 'AI Intake', Icon: Sparkles }] : []),
+    ...(user.role === 'SALES_HEAD'
+      ? [{ to: '/approval', label: 'Approvals', Icon: ClipboardCheck }]
+      : []),
   ];
 
   return (
@@ -52,20 +55,24 @@ export function AppLayout() {
           <div className="flex items-center justify-between h-14">
             {/* Brand */}
             <div className="flex items-center gap-6">
-              <span className="font-semibold text-gray-900 text-sm">RFQ-to-Quote</span>
+              <span className="inline-flex items-center gap-2 font-semibold text-gray-900 text-sm">
+                <Calculator className="w-4 h-4 text-brand-600 shrink-0" strokeWidth={1.8} />
+                <span>RFQ-to-Quote</span>
+              </span>
               <nav className="hidden sm:flex items-center gap-1">
-                {navLinks.map((link) => (
+                {navLinks.map(({ to, label, Icon }) => (
                   <Link
-                    key={link.to}
-                    to={link.to}
+                    key={to}
+                    to={to}
                     className={[
-                      'px-3 py-1.5 rounded text-sm font-medium transition-colors',
-                      location.pathname.startsWith(link.to)
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors',
+                      location.pathname.startsWith(to)
                         ? 'bg-brand-50 text-brand-700'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
                     ].join(' ')}
                   >
-                    {link.label}
+                    <Icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+                    <span>{label}</span>
                   </Link>
                 ))}
               </nav>
@@ -74,6 +81,7 @@ export function AppLayout() {
             {/* User info + logout */}
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex items-center gap-2">
+                <User className="w-4 h-4 text-gray-400 shrink-0" strokeWidth={1.8} />
                 <span className="text-sm text-gray-700">{user.name}</span>
                 <Badge variant={roleBadgeVariant(user.role)}>{roleLabel(user.role)}</Badge>
               </div>

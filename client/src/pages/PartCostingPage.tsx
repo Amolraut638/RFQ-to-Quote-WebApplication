@@ -1,5 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  Boxes,
+  Calculator,
+  CheckCircle2,
+  ChevronRight,
+  History,
+  Package,
+  Plus,
+  Settings,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import { costingApi, partApi } from '../api';
 import {
   CostingContext,
@@ -301,12 +316,19 @@ export function PartCostingPage() {
   if (contextError) {
     return (
       <div className="space-y-4">
-        <Link to={`/rfqs/${rfqId}`} className="text-sm text-brand-600 hover:underline">
-          ← Back to RFQ
+        <Link
+          to={`/rfqs/${rfqId}`}
+          className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
+        >
+          <ArrowLeft className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+          <span>Back to RFQ</span>
         </Link>
-        <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-          <p className="font-medium">Cannot load costing context</p>
-          <p className="mt-1">{contextError}</p>
+        <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={1.8} />
+          <div>
+            <p className="font-medium">Cannot load costing context</p>
+            <p className="mt-1">{contextError}</p>
+          </div>
         </div>
       </div>
     );
@@ -319,21 +341,25 @@ export function PartCostingPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-1.5 text-sm">
         <Link to="/rfqs" className="text-brand-600 hover:underline">RFQ Register</Link>
-        <span className="text-gray-400">›</span>
+        <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" strokeWidth={1.8} />
         <Link to={`/rfqs/${rfqId}`} className="text-brand-600 hover:underline">
           {context.rfq.rfqNo}
         </Link>
-        <span className="text-gray-400">›</span>
+        <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" strokeWidth={1.8} />
         <span className="text-gray-600">Cost Part</span>
       </div>
 
-      <h1 className="text-lg font-semibold text-gray-900">Part Costing</h1>
+      <div className="flex items-center gap-2">
+        <Calculator className="w-5 h-5 text-brand-600 shrink-0" strokeWidth={1.8} />
+        <h1 className="text-lg font-semibold text-gray-900">Part Costing</h1>
+      </div>
 
       {/* PART INFORMATION */}
       <section className="bg-white border border-gray-200 rounded-lg">
-        <div className="px-5 py-3 border-b border-gray-100">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+          <Package className="w-4 h-4 text-gray-400 shrink-0" strokeWidth={1.8} />
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
             Part Information
           </h2>
@@ -364,7 +390,8 @@ export function PartCostingPage() {
 
       {/* MATERIAL COSTING */}
       <section className="bg-white border border-gray-200 rounded-lg">
-        <div className="px-5 py-3 border-b border-gray-100">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+          <Boxes className="w-4 h-4 text-gray-400 shrink-0" strokeWidth={1.8} />
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
             Material Costing
           </h2>
@@ -393,6 +420,7 @@ export function PartCostingPage() {
       <section className="bg-white border border-gray-200 rounded-lg">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-brand-600 shrink-0" strokeWidth={1.8} />
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
               AI Historical Routing Suggestion
             </h2>
@@ -492,11 +520,15 @@ export function PartCostingPage() {
       {/* ROUTING OPERATIONS */}
       <section className="bg-white border border-gray-200 rounded-lg">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Routing Operations
-          </h2>
+          <div className="flex items-center gap-2">
+            <Settings className="w-4 h-4 text-gray-400 shrink-0" strokeWidth={1.8} />
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Routing Operations
+            </h2>
+          </div>
           <Button variant="secondary" size="sm" onClick={addOp}>
-            + Add Operation
+            <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+            <span>Add Operation</span>
           </Button>
         </div>
 
@@ -566,9 +598,12 @@ export function PartCostingPage() {
                     size="sm"
                     disabled={ops.length === 1}
                     onClick={() => removeOp(op.id)}
+                    aria-label={`Remove operation ${i + 1}`}
+                    title="Remove routing operation"
                     className="text-red-500 hover:text-red-700 disabled:text-gray-300"
                   >
-                    × Remove
+                    <Trash2 className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                    <span>Remove</span>
                   </Button>
                 </div>
               </div>
@@ -673,6 +708,7 @@ export function PartCostingPage() {
         <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-gray-400 shrink-0" strokeWidth={1.8} />
               <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Historical Quote Comparison
               </h2>
@@ -853,8 +889,9 @@ export function PartCostingPage() {
                 </div>
 
                 {comparisonError && (
-                  <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-                    {comparisonError}
+                  <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+                    <span>{comparisonError}</span>
                   </div>
                 )}
 
@@ -901,6 +938,10 @@ export function PartCostingPage() {
                     {/* Equivalence Indicator / Warnings */}
                     {comparisonResult.isDirectlyEquivalent ? (
                       <div className="p-2.5 rounded bg-green-50 border border-green-200 text-xs text-green-800 flex items-center gap-2">
+                        <CheckCircle2
+                          className="w-4 h-4 text-green-700 shrink-0"
+                          strokeWidth={1.8}
+                        />
                         <Badge variant="green">Directly Equivalent</Badge>
                         <span>
                           Material grade, gross weight, annual volume, and rate percentages match at
@@ -910,6 +951,10 @@ export function PartCostingPage() {
                     ) : (
                       <div className="p-3 rounded bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-1">
                         <div className="font-semibold flex items-center gap-2">
+                          <AlertTriangle
+                            className="w-4 h-4 text-amber-700 shrink-0"
+                            strokeWidth={1.8}
+                          />
                           <Badge variant="yellow">Equivalence Differences Noted</Badge>
                           <span>
                             Comparing at equivalent {comparisonResult.tierPercentage}% volume tier (
@@ -1113,8 +1158,9 @@ export function PartCostingPage() {
 
       {/* Error */}
       {previewError && (
-        <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-          {previewError}
+        <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+          <span>{previewError}</span>
         </div>
       )}
 
@@ -1126,7 +1172,8 @@ export function PartCostingPage() {
           loading={previewLoading}
           onClick={handlePreview}
         >
-          Calculate Preview
+          <Calculator className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+          <span>Calculate Preview</span>
         </Button>
         <Link to={`/rfqs/${rfqId}`} className="text-sm text-gray-500 hover:text-gray-700">
           Cancel

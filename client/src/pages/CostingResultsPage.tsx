@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, ChevronRight } from 'lucide-react';
 import { costingApi } from '../api';
 import { CostingFormInputs, CostingPreviewResult, VolumeTier, QuoteSummary } from '../types';
 import { Badge } from '../components/ui/Badge';
@@ -100,8 +101,9 @@ function SavedQuotePanel({
   return (
     <div className="bg-green-50 border border-green-200 rounded-lg p-5 space-y-3">
       <div className="flex items-center gap-2">
+        <CheckCircle2 className="w-4 h-4 text-green-700 shrink-0" strokeWidth={1.8} />
         <span className="text-green-700 font-semibold text-sm">
-          ✓ Quote v{quote.version} saved successfully
+          Quote v{quote.version} saved successfully
         </span>
         <Badge variant="gray">DRAFT</Badge>
       </div>
@@ -125,9 +127,10 @@ function SavedQuotePanel({
       </dl>
       <Link
         to={`/rfqs/${rfqId}`}
-        className="inline-flex text-sm text-brand-600 hover:underline font-medium"
+        className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline font-medium"
       >
-        View RFQ →
+        <span>View RFQ</span>
+        <ArrowRight className="w-4 h-4 shrink-0" strokeWidth={1.8} />
       </Link>
     </div>
   );
@@ -198,15 +201,15 @@ export function CostingResultsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-1.5 text-sm">
         <Link to="/rfqs" className="text-brand-600 hover:underline">RFQ Register</Link>
-        <span className="text-gray-400">›</span>
+        <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" strokeWidth={1.8} />
         <Link to={`/rfqs/${rfqId}`} className="text-brand-600 hover:underline">RFQ</Link>
-        <span className="text-gray-400">›</span>
+        <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" strokeWidth={1.8} />
         <Link to={`/rfqs/${rfqId}/parts/${partId}/costing`} className="text-brand-600 hover:underline">
           Part Costing
         </Link>
-        <span className="text-gray-400">›</span>
+        <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" strokeWidth={1.8} />
         <span className="text-gray-600">Results</span>
       </div>
 
@@ -329,18 +332,22 @@ export function CostingResultsPage() {
 
       {/* Submitted confirmation banner */}
       {submitted && (
-        <div className="p-4 rounded bg-blue-50 border border-blue-200 text-sm text-blue-700">
-          ✓ Quote submitted.{' '}
-          {approvalDecision.requiresApproval
-            ? 'It is now pending Sales Head approval.'
-            : 'It is ready for sales (no approval required).'}
+        <div className="p-4 rounded bg-blue-50 border border-blue-200 text-sm text-blue-700 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-blue-700 shrink-0" strokeWidth={1.8} />
+          <span>
+            Quote submitted.{' '}
+            {approvalDecision.requiresApproval
+              ? 'It is now pending Sales Head approval.'
+              : 'It is ready for sales (no approval required).'}
+          </span>
         </div>
       )}
 
       {/* Save error */}
       {saveError && (
-        <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-          {saveError}
+        <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+          <span>{saveError}</span>
         </div>
       )}
 
@@ -352,7 +359,8 @@ export function CostingResultsPage() {
             size="md"
             onClick={() => navigate(-1)}
           >
-            ← Revise Inputs
+            <ArrowLeft className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+            <span>Revise Inputs</span>
           </Button>
 
           {user?.role === 'ESTIMATOR' && (

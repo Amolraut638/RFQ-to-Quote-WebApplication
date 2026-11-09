@@ -1,5 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Calculator,
+  Clock,
+  History,
+  Package,
+  Send,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+} from 'lucide-react';
 import { rfqApi, costingApi, quoteApi } from '../api';
 import {
   LostReason,
@@ -54,6 +68,20 @@ function rfqStatusVariant(status: RFQStatus): 'blue' | 'yellow' | 'green' | 'gra
       return 'green';
     case 'LOST':
       return 'red';
+  }
+}
+
+function rfqStatusIcon(status: RFQStatus) {
+  switch (status) {
+    case 'ESTIMATING':
+    case 'PENDING_APPROVAL':
+      return <Clock className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+    case 'SENT':
+      return <Send className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+    case 'WON':
+      return <Trophy className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+    case 'LOST':
+      return <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
   }
 }
 
@@ -152,8 +180,22 @@ function directionColorClass(direction: 'INCREASED' | 'DECREASED' | 'UNCHANGED')
 }
 
 function directionBadge(direction: 'INCREASED' | 'DECREASED' | 'UNCHANGED') {
-  if (direction === 'INCREASED') return <Badge variant="yellow">▲ Increased</Badge>;
-  if (direction === 'DECREASED') return <Badge variant="green">▼ Decreased</Badge>;
+  if (direction === 'INCREASED') {
+    return (
+      <Badge variant="yellow">
+        <TrendingUp className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+        <span>Increased</span>
+      </Badge>
+    );
+  }
+  if (direction === 'DECREASED') {
+    return (
+      <Badge variant="green">
+        <TrendingDown className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+        <span>Decreased</span>
+      </Badge>
+    );
+  }
   return <Badge variant="gray">Unchanged</Badge>;
 }
 
@@ -363,8 +405,9 @@ export function RFQDetailPage() {
 
   if (error) {
     return (
-      <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-        Failed to load RFQ: {error}
+      <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+        <span>Failed to load RFQ: {error}</span>
       </div>
     );
   }
@@ -378,8 +421,12 @@ export function RFQDetailPage() {
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
-      <Link to="/rfqs" className="text-sm text-brand-600 hover:underline">
-        ← RFQ Register
+      <Link
+        to="/rfqs"
+        className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
+      >
+        <ArrowLeft className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+        <span>RFQ Register</span>
       </Link>
 
       {/* RFQ Header Card */}
@@ -388,14 +435,20 @@ export function RFQDetailPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2.5 mb-1">
               <span className="font-mono text-lg font-semibold text-gray-900">{rfq.rfqNo}</span>
-              <Badge variant={rfqStatusVariant(rfq.status)}>{rfqStatusLabel(rfq.status)}</Badge>
+              <Badge variant={rfqStatusVariant(rfq.status)}>
+                {rfqStatusIcon(rfq.status)}
+                <span>{rfqStatusLabel(rfq.status)}</span>
+              </Badge>
               {rfq.importSource === 'HISTORICAL_EXCEL' && (
                 <Badge variant="yellow">
                   {rfq.isSyntheticDemo ? 'Imported · Synthetic Demo' : 'Imported Excel'}
                 </Badge>
               )}
               {rfq.isOverdue && (
-                <Badge variant="red">Overdue</Badge>
+                <Badge variant="red">
+                  <AlertTriangle className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />
+                  <span>Overdue</span>
+                </Badge>
               )}
             </div>
             <p className="text-gray-700 text-base">{rfq.customer}</p>
@@ -412,7 +465,8 @@ export function RFQDetailPage() {
                   onClick={() => void handleMarkWon()}
                   className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
                 >
-                  {outcomeSubmitting ? 'Saving…' : 'Mark as Won'}
+                  <Trophy className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                  <span>{outcomeSubmitting ? 'Saving…' : 'Mark as Won'}</span>
                 </Button>
                 <Button
                   size="sm"
@@ -427,15 +481,17 @@ export function RFQDetailPage() {
                   }}
                   className="text-red-700 border-red-300 hover:bg-red-50"
                 >
-                  Mark as Lost
+                  <TrendingDown className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                  <span>Mark as Lost</span>
                 </Button>
               </div>
             )}
         </div>
 
         {outcomeError && (
-          <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-            {outcomeError}
+          <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+            <span>{outcomeError}</span>
           </div>
         )}
 
@@ -594,13 +650,17 @@ export function RFQDetailPage() {
 
       {/* Parts List */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-          Parts ({rfq.parts?.length ?? 0})
-        </h2>
+        <div className="flex items-center gap-2 mb-3">
+          <Package className="w-4 h-4 text-gray-400 shrink-0" strokeWidth={1.8} />
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+            Parts ({rfq.parts?.length ?? 0})
+          </h2>
+        </div>
 
         {!rfq.parts || rfq.parts.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg py-10 text-center text-sm text-gray-400">
-            No parts found for this RFQ.
+            <Package className="w-6 h-6 text-gray-300 mx-auto mb-2" strokeWidth={1.8} />
+            <p>No parts found for this RFQ.</p>
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -634,7 +694,9 @@ export function RFQDetailPage() {
                             navigate(`/rfqs/${id}/parts/${part._id}/costing`)
                           }
                         >
-                          Cost This Part →
+                          <Calculator className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                          <span>Cost This Part</span>
+                          <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
                         </Button>
                       </td>
                     )}
@@ -650,6 +712,7 @@ export function RFQDetailPage() {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-gray-400 shrink-0" strokeWidth={1.8} />
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
               Quote History ({quotes.length})
             </h2>
@@ -680,10 +743,13 @@ export function RFQDetailPage() {
           <div className="text-sm text-gray-400 py-4">Loading quotes…</div>
         ) : quotes.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg py-10 text-center text-sm text-gray-400">
-            No quotes yet.
-            {user?.role === 'ESTIMATOR' && rfq.parts?.length > 0 && (
-              <span> Select a part above to begin costing.</span>
-            )}
+            <History className="w-6 h-6 text-gray-300 mx-auto mb-2" strokeWidth={1.8} />
+            <p>
+              No quotes yet.
+              {user?.role === 'ESTIMATOR' && rfq.parts?.length > 0 && (
+                <span> Select a part above to begin costing.</span>
+              )}
+            </p>
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -753,7 +819,8 @@ export function RFQDetailPage() {
                               size="sm"
                               onClick={() => navigate(`/approvals/${q._id}`)}
                             >
-                              Review →
+                              <span>Review</span>
+                              <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
                             </Button>
                           )}
                       </div>
@@ -830,8 +897,9 @@ export function RFQDetailPage() {
             )}
 
             {!compareLoading && compareError && (
-              <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-                {compareError}
+              <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+                <span>{compareError}</span>
               </div>
             )}
 

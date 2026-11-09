@@ -10,6 +10,20 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Info,
+  Package,
+  Pencil,
+  Plus,
+  Sparkles,
+  XCircle,
+} from 'lucide-react';
 import { intakeApi } from '../api';
 import {
   IntakeAIStatus,
@@ -45,14 +59,34 @@ const PART_FIELDS_META: Array<{
 function fieldStatusBadge(status: FieldStatus) {
   switch (status) {
     case 'ACCEPTED':
-      return <Badge variant="green">Accepted</Badge>;
+      return (
+        <Badge variant="green">
+          <CheckCircle className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+          <span>Accepted</span>
+        </Badge>
+      );
     case 'EDITED':
-      return <Badge variant="blue">Edited</Badge>;
+      return (
+        <Badge variant="blue">
+          <Pencil className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+          <span>Edited</span>
+        </Badge>
+      );
     case 'REJECTED':
-      return <Badge variant="red">Rejected</Badge>;
+      return (
+        <Badge variant="red">
+          <XCircle className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+          <span>Rejected</span>
+        </Badge>
+      );
     case 'PENDING':
     default:
-      return <Badge variant="yellow">Pending Review</Badge>;
+      return (
+        <Badge variant="yellow">
+          <Clock className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+          <span>Pending Review</span>
+        </Badge>
+      );
   }
 }
 
@@ -260,14 +294,17 @@ export function IntakePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sm mb-1">
+          <div className="flex items-center gap-1.5 text-sm mb-1">
             <Link to="/rfqs" className="text-brand-600 hover:underline">
               RFQ Register
             </Link>
-            <span className="text-gray-400">›</span>
+            <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" strokeWidth={1.8} />
             <span className="text-gray-600">AI-Assisted Intake</span>
           </div>
-          <h1 className="text-lg font-semibold text-gray-900">AI-Assisted RFQ Intake</h1>
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-brand-600 shrink-0" strokeWidth={1.8} />
+            <h1 className="text-lg font-semibold text-gray-900">AI-Assisted RFQ Intake</h1>
+          </div>
           <p className="text-sm text-gray-500">
             Extract RFQ details from emails, Excel part lists, and drawing PDFs. Every value must be
             reviewed before creating the RFQ.
@@ -298,9 +335,12 @@ export function IntakePage() {
 
       {/* Data policy notice */}
       {aiStatus?.dataPolicyNotice && (
-        <div className="p-3 rounded bg-amber-50 border border-amber-200 text-xs text-amber-800">
-          <span className="font-semibold">Confidentiality Notice: </span>
-          {aiStatus.dataPolicyNotice}
+        <div className="p-3 rounded bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+          <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" strokeWidth={1.8} />
+          <div>
+            <span className="font-semibold">Confidentiality Notice: </span>
+            {aiStatus.dataPolicyNotice}
+          </div>
         </div>
       )}
 
@@ -418,8 +458,9 @@ export function IntakePage() {
           )}
 
           {extractError && (
-            <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-              {extractError}
+            <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+              <span>{extractError}</span>
             </div>
           )}
 
@@ -440,8 +481,9 @@ export function IntakePage() {
       </section>
 
       {fieldError && (
-        <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-          {fieldError}
+        <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+          <span>{fieldError}</span>
         </div>
       )}
 
@@ -597,15 +639,19 @@ export function IntakePage() {
                 disabled={savingField}
                 onClick={() => applyUpdates([], true)}
               >
-                + Add Part Manually
+                <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                <span>Add Part Manually</span>
               </Button>
             )}
           </div>
 
           {draft.partCount === 0 ? (
             <div className="p-8 text-center text-sm text-gray-500">
-              No parts extracted yet. Upload an Excel part list or drawing PDF, or click{' '}
-              <span className="font-medium">+ Add Part Manually</span>.
+              <Package className="w-6 h-6 text-gray-300 mx-auto mb-2" strokeWidth={1.8} />
+              <p>
+                No parts extracted yet. Upload an Excel part list or drawing PDF, or click{' '}
+                <span className="font-medium">Add Part Manually</span>.
+              </p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
@@ -809,25 +855,30 @@ export function IntakePage() {
           )}
 
           {commitError && (
-            <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-              {commitError}
+            <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+              <span>{commitError}</span>
             </div>
           )}
 
           {commitSuccess ? (
             <div className="p-4 rounded bg-green-50 border border-green-200 text-sm text-green-800 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-semibold">
-                  RFQ <span className="font-mono">{commitSuccess.rfqNo}</span> created with{' '}
-                  {commitSuccess.partCount} part{commitSuccess.partCount === 1 ? '' : 's'}.
-                </p>
-                <p className="text-xs text-green-700 mt-0.5">
-                  Proceed to the RFQ detail page to open Part Costing and view historical routing
-                  suggestions.
-                </p>
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-green-700 shrink-0 mt-0.5" strokeWidth={1.8} />
+                <div>
+                  <p className="font-semibold">
+                    RFQ <span className="font-mono">{commitSuccess.rfqNo}</span> created with{' '}
+                    {commitSuccess.partCount} part{commitSuccess.partCount === 1 ? '' : 's'}.
+                  </p>
+                  <p className="text-xs text-green-700 mt-0.5">
+                    Proceed to the RFQ detail page to open Part Costing and view historical routing
+                    suggestions.
+                  </p>
+                </div>
               </div>
               <Button onClick={() => navigate(`/rfqs/${commitSuccess.rfqId}`)}>
-                Open RFQ {commitSuccess.rfqNo} →
+                <span>Open RFQ {commitSuccess.rfqNo}</span>
+                <ArrowRight className="w-4 h-4 shrink-0" strokeWidth={1.8} />
               </Button>
             </div>
           ) : (

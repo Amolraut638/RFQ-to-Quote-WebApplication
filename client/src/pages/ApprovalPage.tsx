@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AlertCircle, ArrowRight, CheckCircle, ClipboardCheck } from 'lucide-react';
 import { approvalApi } from '../api';
 import { PendingApproval, PopulatedRFQRef, PopulatedUserRef } from '../types';
 import { Button } from '../components/ui/Button';
@@ -69,8 +70,9 @@ export function ApprovalPage() {
 
   if (user?.role !== 'SALES_HEAD') {
     return (
-      <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-        Access denied. Sales Head only.
+      <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+        <span>Access denied. Sales Head only.</span>
       </div>
     );
   }
@@ -79,7 +81,10 @@ export function ApprovalPage() {
     <div className="space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="text-lg font-semibold text-gray-900">Approval Queue</h1>
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="w-5 h-5 text-brand-600 shrink-0" strokeWidth={1.8} />
+          <h1 className="text-lg font-semibold text-gray-900">Approval Queue</h1>
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           Quotes requiring Sales Head approval (annual value &gt; ₹25,00,000)
         </p>
@@ -106,12 +111,14 @@ export function ApprovalPage() {
         {loading ? (
           <div className="text-sm text-gray-400 py-4">Loading…</div>
         ) : error ? (
-          <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-            {error}
+          <div className="p-4 rounded bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+            <span>{error}</span>
           </div>
         ) : pending.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg py-12 text-center text-sm text-gray-400">
-            No quotes pending approval.
+            <CheckCircle className="w-6 h-6 text-gray-300 mx-auto mb-2" strokeWidth={1.8} />
+            <p>No quotes pending approval.</p>
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -150,7 +157,8 @@ export function ApprovalPage() {
                         size="sm"
                         onClick={() => navigate(`/approvals/${q._id}`)}
                       >
-                        Review →
+                        <span>Review</span>
+                        <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
                       </Button>
                     </td>
                   </tr>
