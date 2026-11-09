@@ -20,6 +20,9 @@ import quoteRoutes from './routes/quote.routes';
 
 const app = express();
 
+// Trust reverse proxy (Render, AWS ALB, Cloudflare) for secure cookie handling and HTTPS protocol detection
+app.set('trust proxy', 1);
+
 // ---------------------------------------------------------------------------
 // Security
 // ---------------------------------------------------------------------------
@@ -27,10 +30,34 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: config.clientUrl,
+    origin: (requestOrigin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!requestOrigin) return callback(null, true);
+
+      const target = config.clientUrl.replace(/\/+$/, '');
+      const current = requestOrigin.replace(/\/+$/, '');
+
+      let isVercel = false;
+      try {
+        isVercel = new URL(requestOrigin).hostname.endsWith('.vercel.app');
+      } catch {
+        isVercel = false;
+      }
+
+      if (
+        current === target ||
+        current === 'http://localhost:5173' ||
+        current === 'http://localhost:3000' ||
+        isVercel
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`Origin ${requestOrigin} not allowed by CORS`));
+    },
     credentials: true, // Required for httpOnly cookie auth
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
   })
 );
 

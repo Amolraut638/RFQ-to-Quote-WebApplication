@@ -25,7 +25,7 @@ import {
 
 export const authApi = {
   login: (email: string, password: string) =>
-    api.post<{ success: boolean; user: User }>('/api/auth/login', { email, password }),
+    api.post<{ success: boolean; user: User; token?: string }>('/api/auth/login', { email, password }),
 
   logout: () =>
     api.post<{ success: boolean }>('/api/auth/logout'),

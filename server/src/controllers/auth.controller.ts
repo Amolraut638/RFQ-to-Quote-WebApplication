@@ -26,17 +26,22 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
 
     const { token, user } = await AuthService.login(parsed.data);
 
+    // Detect HTTPS directly or via reverse proxy headers (e.g. Render)
+    const isSecure = config.isProduction || req.secure || req.headers['x-forwarded-proto'] === 'https';
+
     res.cookie('token', token, {
       httpOnly: true,
-      secure: config.isProduction,
+      secure: isSecure,
       // 'none' required for cross-origin Vercel (frontend) → Render (API) cookie delivery.
       // Browsers block SameSite=strict/lax cookies on cross-site requests.
-      // 'none' is only valid with secure:true (enforced by isProduction check above).
-      sameSite: config.isProduction ? 'none' : 'lax',
+      // 'none' is only valid with secure:true.
+      sameSite: isSecure ? 'none' : 'lax',
+      path: '/',
+      partitioned: isSecure,
       maxAge: cookieMaxAge(config.jwtExpiresIn),
     });
 
-    res.json({ success: true, user });
+    res.json({ success: true, user, token });
   } catch (err) {
     if (err instanceof AuthService.AuthError) {
       res.status(err.statusCode).json({ error: err.message });
@@ -46,11 +51,15 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
   }
 }
 
-export function logout(_req: Request, res: Response): void {
+export function logout(req: Request, res: Response): void {
+  const isSecure = config.isProduction || req.secure || req.headers['x-forwarded-proto'] === 'https';
+
   res.clearCookie('token', {
     httpOnly: true,
-    secure: config.isProduction,
-    sameSite: config.isProduction ? 'none' : 'lax',
+    secure: isSecure,
+    sameSite: isSecure ? 'none' : 'lax',
+    path: '/',
+    partitioned: isSecure,
   });
   res.json({ success: true, message: 'Logged out' });
 }
