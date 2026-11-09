@@ -25,6 +25,7 @@ vi.mock('../src/models/RFQ', async () => {
       find: vi.fn(),
       findById: vi.fn(),
       insertMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
   };
 });
@@ -34,6 +35,7 @@ vi.mock('../src/models/Part', () => ({
     find: vi.fn(),
     findById: vi.fn(),
     insertMany: vi.fn(),
+    deleteMany: vi.fn(),
   },
 }));
 
@@ -46,6 +48,7 @@ vi.mock('../src/models/Quote', async () => {
       findOne: vi.fn(),
       findById: vi.fn(),
       insertMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
   };
 });
@@ -105,6 +108,14 @@ function setupInMemoryCollections() {
     return docs;
   }) as never);
 
+  vi.mocked(RFQ.deleteMany).mockImplementation((async (filter: Doc = {}) => {
+    if (filter._id?.$in) {
+      const idSet = new Set(filter._id.$in.map(String));
+      db.rfqs = db.rfqs.filter((r) => !idSet.has(String(r._id)));
+    }
+    return { deletedCount: 1 };
+  }) as never);
+
   vi.mocked(Part.find).mockImplementation(((filter: Doc = {}) => {
     const res = db.parts.filter((p) => {
       if (filter.rfqId?.$in) {
@@ -134,6 +145,14 @@ function setupInMemoryCollections() {
   vi.mocked(Part.insertMany).mockImplementation((async (docs: Doc[]) => {
     db.parts.push(...docs);
     return docs;
+  }) as never);
+
+  vi.mocked(Part.deleteMany).mockImplementation((async (filter: Doc = {}) => {
+    if (filter._id?.$in) {
+      const idSet = new Set(filter._id.$in.map(String));
+      db.parts = db.parts.filter((p) => !idSet.has(String(p._id)));
+    }
+    return { deletedCount: 1 };
   }) as never);
 
   vi.mocked(Quote.find).mockImplementation(((filter: Doc = {}) => {
@@ -178,6 +197,14 @@ function setupInMemoryCollections() {
   vi.mocked(Quote.insertMany).mockImplementation((async (docs: Doc[]) => {
     db.quotes.push(...docs);
     return docs;
+  }) as never);
+
+  vi.mocked(Quote.deleteMany).mockImplementation((async (filter: Doc = {}) => {
+    if (filter._id?.$in) {
+      const idSet = new Set(filter._id.$in.map(String));
+      db.quotes = db.quotes.filter((q) => !idSet.has(String(q._id)));
+    }
+    return { deletedCount: 1 };
   }) as never);
 
   return db;
@@ -460,5 +487,123 @@ describe('Historical Quote Excel Import', () => {
         cycleTimeMinutes: 0.8,
       },
     ]);
+  });
+
+  it('8. dryRun=true performs zero database writes and reports zero created records', async () => {
+    const db = setupInMemoryCollections();
+    const templateBuffer = generateHistoricalImportTemplateBuffer();
+
+    const summary = await importHistoricalQuotesFromBuffer({
+      buffer: templateBuffer,
+      actorId,
+      dryRun: true,
+    });
+
+    expect(summary.dryRun).toBe(true);
+    expect(summary.totalRowsRead).toBe(2);
+    expect(summary.completeRowsCount).toBe(2);
+    expect(summary.importedQuotesCount).toBe(0);
+    expect(summary.createdRfqsCount).toBe(0);
+    expect(summary.createdPartsCount).toBe(0);
+
+    expect(RFQ.insertMany).not.toHaveBeenCalled();
+    expect(Part.insertMany).not.toHaveBeenCalled();
+    expect(Quote.insertMany).not.toHaveBeenCalled();
+    expect(db.rfqs).toHaveLength(0);
+    expect(db.parts).toHaveLength(0);
+    expect(db.quotes).toHaveLength(0);
+  });
+
+  it('9. dryRun=false rolls back newly inserted RFQs and Parts if Quote.insertMany fails mid-import', async () => {
+    const db = setupInMemoryCollections();
+    const templateBuffer = generateHistoricalImportTemplateBuffer();
+
+    // Seed an existing native RFQ & Part to ensure rollback only touches the failed batch
+    const nativeRfqId = new mongoose.Types.ObjectId();
+    db.rfqs.push({
+      _id: nativeRfqId,
+      rfqNo: 'RFQ-NATIVE-001',
+      customer: 'Native Customer',
+      status: 'ESTIMATING',
+      importSource: 'MANUAL',
+    });
+
+    vi.mocked(Quote.insertMany).mockRejectedValueOnce(new Error('Simulated DB write error'));
+
+    await expect(
+      importHistoricalQuotesFromBuffer({
+        buffer: templateBuffer,
+        actorId,
+        dryRun: false,
+      }),
+    ).rejects.toThrow('Simulated DB write error');
+
+    expect(RFQ.deleteMany).toHaveBeenCalledTimes(1);
+    expect(Part.deleteMany).toHaveBeenCalledTimes(1);
+    // Only the pre-existing native RFQ remains; zero orphaned imported RFQs or Parts
+    expect(db.rfqs).toHaveLength(1);
+    expect(db.rfqs[0].rfqNo).toBe('RFQ-NATIVE-001');
+    expect(db.parts).toHaveLength(0);
+    expect(db.quotes).toHaveLength(0);
+  });
+
+  it('10. Concurrent imports of the same workbook serialize safely without creating duplicate RFQs, Parts, or Quotes', async () => {
+    const db = setupInMemoryCollections();
+    const templateBuffer = generateHistoricalImportTemplateBuffer();
+
+    // Seed an existing native RFQ and Quote to verify native records are untouched
+    const nativeRfqId = new mongoose.Types.ObjectId();
+    const nativeQuoteId = new mongoose.Types.ObjectId();
+    db.rfqs.push({
+      _id: nativeRfqId,
+      rfqNo: 'RFQ-NATIVE-999',
+      customer: 'Native Tier-1 Customer',
+      status: 'SENT',
+      importSource: 'MANUAL',
+      isSyntheticDemo: false,
+    });
+    db.quotes.push({
+      _id: nativeQuoteId,
+      rfqId: nativeRfqId,
+      version: 1,
+      status: 'SENT',
+      importSource: 'NATIVE',
+      isSyntheticDemo: false,
+    });
+
+    const [res1, res2] = await Promise.all([
+      importHistoricalQuotesFromBuffer({
+        buffer: templateBuffer,
+        actorId,
+        dryRun: false,
+      }),
+      importHistoricalQuotesFromBuffer({
+        buffer: templateBuffer,
+        actorId,
+        dryRun: false,
+      }),
+    ]);
+
+    expect(res1.importedQuotesCount + res2.importedQuotesCount).toBe(2);
+    expect(res1.skippedAlreadyExistsCount + res2.skippedAlreadyExistsCount).toBe(2);
+
+    // 1 native + 2 imported RFQs = 3 total RFQs
+    expect(db.rfqs).toHaveLength(3);
+    expect(db.parts).toHaveLength(2);
+    // 1 native + 2 imported Quotes = 3 total Quotes
+    expect(db.quotes).toHaveLength(3);
+
+    // Verify externalRowKey and importBatchId are persisted on imported quotes, while native remains untouched
+    const importedQuotes = db.quotes.filter((q) => q.importSource === 'HISTORICAL_EXCEL');
+    expect(importedQuotes).toHaveLength(2);
+    for (const iq of importedQuotes) {
+      expect(iq.externalRowKey).toBeTruthy();
+      expect(iq.importBatchId).toMatch(/^HIST-\d{4}-\d{2}-\d{2}-/);
+      expect(iq.isSyntheticDemo).toBe(true);
+    }
+
+    const nativeQuote = db.quotes.find((q) => String(q._id) === String(nativeQuoteId))!;
+    expect(nativeQuote.importSource).toBe('NATIVE');
+    expect(nativeQuote.isSyntheticDemo).toBe(false);
   });
 });

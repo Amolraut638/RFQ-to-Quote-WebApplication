@@ -79,7 +79,7 @@ const RFQSchema = new Schema<IRFQ>(
       type: String,
       enum: ['HISTORICAL_EXCEL'],
     },
-    importBatchId: { type: String, trim: true },
+    importBatchId: { type: String, trim: true, index: true },
     isSyntheticDemo: { type: Boolean },
   },
   { timestamps: true }

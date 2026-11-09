@@ -305,7 +305,7 @@ const QuoteSchema = new Schema<IQuote>(
       type: String,
       enum: ['HISTORICAL_EXCEL'],
     },
-    importBatchId: { type: String, trim: true },
+    importBatchId: { type: String, trim: true, index: true },
     externalRowKey: { type: String, trim: true },
     isSyntheticDemo: { type: Boolean },
     historicalStatedPriceExGst: { type: mongoose.Schema.Types.Decimal128 },

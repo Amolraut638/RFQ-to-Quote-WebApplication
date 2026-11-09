@@ -99,6 +99,17 @@ function serializeQuote(quote: IQuote): Record<string, unknown> {
     costingInputSnapshot: serializeCostingInputSnapshot((quote as any).costingInputSnapshot),
     costBreakdown: (quote as any).costBreakdown,
     volumeTierResults: (quote as any).volumeTierResults,
+    importSource: (quote as any).importSource,
+    importBatchId: (quote as any).importBatchId,
+    externalRowKey: (quote as any).externalRowKey,
+    isSyntheticDemo: Boolean((quote as any).isSyntheticDemo),
+    historicalStatedPriceExGst: (quote as any).historicalStatedPriceExGst
+      ? d128Str((quote as any).historicalStatedPriceExGst)
+      : undefined,
+    priceDiscrepancyFlag: Boolean((quote as any).priceDiscrepancyFlag),
+    priceDiscrepancyDelta: (quote as any).priceDiscrepancyDelta
+      ? d128Str((quote as any).priceDiscrepancyDelta)
+      : undefined,
     createdAt: (quote as any).createdAt,
     updatedAt: (quote as any).updatedAt,
   };

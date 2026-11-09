@@ -386,9 +386,14 @@ export function RFQDetailPage() {
       <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-3 mb-1">
+            <div className="flex flex-wrap items-center gap-2.5 mb-1">
               <span className="font-mono text-lg font-semibold text-gray-900">{rfq.rfqNo}</span>
               <Badge variant={rfqStatusVariant(rfq.status)}>{rfqStatusLabel(rfq.status)}</Badge>
+              {rfq.importSource === 'HISTORICAL_EXCEL' && (
+                <Badge variant="yellow">
+                  {rfq.isSyntheticDemo ? 'Imported · Synthetic Demo' : 'Imported Excel'}
+                </Badge>
+              )}
               {rfq.isOverdue && (
                 <Badge variant="red">Overdue</Badge>
               )}
@@ -696,14 +701,31 @@ export function RFQDetailPage() {
               <tbody>
                 {quotes.map((q) => (
                   <tr key={q._id}>
-                    <td className="font-mono font-semibold text-gray-900">v{q.version}</td>
+                    <td className="font-mono font-semibold text-gray-900">
+                      <div className="flex items-center gap-2">
+                        <span>v{q.version}</span>
+                        {q.importSource === 'HISTORICAL_EXCEL' && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                            {q.isSyntheticDemo ? 'Imported · Synthetic Demo' : 'Imported Excel'}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <Badge variant={quoteStatusVariant(q.status)}>
                         {quoteStatusLabel(q.status)}
                       </Badge>
                     </td>
                     <td className="tabular text-right text-gray-900 font-medium">
-                      {formatInr(q.annualQuotationValue)}
+                      <div>{formatInr(q.annualQuotationValue)}</div>
+                      {q.priceDiscrepancyFlag && q.historicalStatedPriceExGst && (
+                        <div
+                          className="text-[11px] font-normal text-amber-700"
+                          title={`Historical sheet stated Ex-GST unit price ₹${q.historicalStatedPriceExGst} differs from deterministic engine calculation (Δ ₹${q.priceDiscrepancyDelta ?? '0.00'})`}
+                        >
+                          Sheet stated: ₹{q.historicalStatedPriceExGst}/pc (Δ ₹{q.priceDiscrepancyDelta ?? '0.00'})
+                        </div>
+                      )}
                     </td>
                     <td className="tabular text-sm text-gray-600">
                       {formatDate(q.costingDate)}

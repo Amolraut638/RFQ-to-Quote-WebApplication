@@ -477,9 +477,30 @@ export function parseHistoricalWorkbookBuffer(
   return mappedRows;
 }
 
+// ─── Concurrency Lock for Historical Import Writes ────────────────────────────
+
+let importLockChain: Promise<unknown> = Promise.resolve();
+
+function withImportWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = importLockChain.then(fn, fn);
+  importLockChain = next.catch(() => undefined);
+  return next;
+}
+
 // ─── Main Deterministic Import Processor ──────────────────────────────────────
 
 export async function importHistoricalQuotesFromBuffer(params: {
+  buffer: Buffer;
+  actorId: string;
+  dryRun?: boolean;
+}): Promise<HistoricalImportSummary> {
+  if (!params.dryRun) {
+    return withImportWriteLock(() => runImportHistoricalQuotes(params));
+  }
+  return runImportHistoricalQuotes(params);
+}
+
+async function runImportHistoricalQuotes(params: {
   buffer: Buffer;
   actorId: string;
   dryRun?: boolean;
@@ -972,16 +993,40 @@ export async function importHistoricalQuotesFromBuffer(params: {
     completeRowsCount++;
   }
 
-  // 12. Batch Write to MongoDB if dryRun === false
+  // 12. Batch Write to MongoDB if dryRun === false (with compensating rollback on failure)
   if (!dryRun && quotesToInsert.length > 0) {
-    for (let i = 0; i < rfqsToInsert.length; i += BATCH_INSERT_SIZE) {
-      await RFQ.insertMany(rfqsToInsert.slice(i, i + BATCH_INSERT_SIZE), { ordered: false });
-    }
-    for (let i = 0; i < partsToInsert.length; i += BATCH_INSERT_SIZE) {
-      await Part.insertMany(partsToInsert.slice(i, i + BATCH_INSERT_SIZE), { ordered: false });
-    }
-    for (let i = 0; i < quotesToInsert.length; i += BATCH_INSERT_SIZE) {
-      await Quote.insertMany(quotesToInsert.slice(i, i + BATCH_INSERT_SIZE), { ordered: false });
+    const insertedRfqIds: unknown[] = [];
+    const insertedPartIds: unknown[] = [];
+    const insertedQuoteIds: unknown[] = [];
+
+    try {
+      for (let i = 0; i < rfqsToInsert.length; i += BATCH_INSERT_SIZE) {
+        const chunk = rfqsToInsert.slice(i, i + BATCH_INSERT_SIZE);
+        await RFQ.insertMany(chunk, { ordered: true });
+        for (const doc of chunk) insertedRfqIds.push(doc._id);
+      }
+      for (let i = 0; i < partsToInsert.length; i += BATCH_INSERT_SIZE) {
+        const chunk = partsToInsert.slice(i, i + BATCH_INSERT_SIZE);
+        await Part.insertMany(chunk, { ordered: true });
+        for (const doc of chunk) insertedPartIds.push(doc._id);
+      }
+      for (let i = 0; i < quotesToInsert.length; i += BATCH_INSERT_SIZE) {
+        const chunk = quotesToInsert.slice(i, i + BATCH_INSERT_SIZE);
+        await Quote.insertMany(chunk, { ordered: true });
+        for (const doc of chunk) insertedQuoteIds.push(doc._id);
+      }
+    } catch (writeErr) {
+      // Compensating rollback: ensure no orphaned RFQ, Part, or Quote documents remain
+      if (insertedQuoteIds.length > 0 && typeof Quote.deleteMany === 'function') {
+        await Quote.deleteMany({ _id: { $in: insertedQuoteIds } }).catch(() => undefined);
+      }
+      if (insertedPartIds.length > 0 && typeof Part.deleteMany === 'function') {
+        await Part.deleteMany({ _id: { $in: insertedPartIds } }).catch(() => undefined);
+      }
+      if (insertedRfqIds.length > 0 && typeof RFQ.deleteMany === 'function') {
+        await RFQ.deleteMany({ _id: { $in: insertedRfqIds } }).catch(() => undefined);
+      }
+      throw writeErr;
     }
   }
 
@@ -991,8 +1036,8 @@ export async function importHistoricalQuotesFromBuffer(params: {
     totalRowsRead: parsedRows.length,
     completeRowsCount,
     importedQuotesCount: dryRun ? 0 : quotesToInsert.length,
-    createdRfqsCount: dryRun ? rfqsToInsert.length : rfqsToInsert.length,
-    createdPartsCount: dryRun ? partsToInsert.length : partsToInsert.length,
+    createdRfqsCount: dryRun ? 0 : rfqsToInsert.length,
+    createdPartsCount: dryRun ? 0 : partsToInsert.length,
     skippedDuplicateInFileCount,
     skippedAlreadyExistsCount,
     skippedIncompleteCount,

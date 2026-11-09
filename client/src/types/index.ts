@@ -174,6 +174,13 @@ export interface QuoteSummary {
   submittedAt?: string;
   sentBy?: string;
   sentAt?: string;
+  importSource?: 'HISTORICAL_EXCEL' | null;
+  importBatchId?: string | null;
+  externalRowKey?: string | null;
+  isSyntheticDemo?: boolean;
+  historicalStatedPriceExGst?: string | null;
+  priceDiscrepancyFlag?: boolean;
+  priceDiscrepancyDelta?: string | null;
 }
 
 export interface MachineOption {
