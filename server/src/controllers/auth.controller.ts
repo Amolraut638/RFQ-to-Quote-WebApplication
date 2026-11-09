@@ -29,7 +29,10 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
     res.cookie('token', token, {
       httpOnly: true,
       secure: config.isProduction,
-      sameSite: config.isProduction ? 'strict' : 'lax',
+      // 'none' required for cross-origin Vercel (frontend) → Render (API) cookie delivery.
+      // Browsers block SameSite=strict/lax cookies on cross-site requests.
+      // 'none' is only valid with secure:true (enforced by isProduction check above).
+      sameSite: config.isProduction ? 'none' : 'lax',
       maxAge: cookieMaxAge(config.jwtExpiresIn),
     });
 
@@ -47,7 +50,7 @@ export function logout(_req: Request, res: Response): void {
   res.clearCookie('token', {
     httpOnly: true,
     secure: config.isProduction,
-    sameSite: config.isProduction ? 'strict' : 'lax',
+    sameSite: config.isProduction ? 'none' : 'lax',
   });
   res.json({ success: true, message: 'Logged out' });
 }
