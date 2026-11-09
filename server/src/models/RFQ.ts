@@ -2,10 +2,24 @@
  * models/RFQ.ts
  *
  * RFQ register. Each RFQ has one or more Parts (separate collection).
- * Status transitions: ESTIMATING → PENDING_APPROVAL → SENT → WON | LOST
+ * Commercial outcome lifecycle: ESTIMATING → SENT → WON | LOST
+ * (Separate from Quote lifecycle: DRAFT → PENDING_APPROVAL / READY_FOR_SALES → APPROVED / REJECTED → SENT)
  */
 
 import mongoose, { Document, Schema } from 'mongoose';
+
+export const LOST_REASONS = [
+  'PRICE_TOO_HIGH',
+  'DELIVERY_TIMELINE',
+  'COMPETITOR_SELECTED',
+  'TECHNICAL_REJECTION',
+  'CUSTOMER_CANCELLED',
+  'OTHER',
+] as const;
+
+export type LostReason = (typeof LOST_REASONS)[number];
+
+export type RFQCommercialOutcome = 'ESTIMATING' | 'SENT' | 'WON' | 'LOST';
 
 export type RFQStatus = 'ESTIMATING' | 'PENDING_APPROVAL' | 'SENT' | 'WON' | 'LOST';
 
@@ -17,7 +31,10 @@ export interface IRFQ extends Document {
   dueDate: Date;
   ownerId: mongoose.Types.ObjectId;
   status: RFQStatus;
-  lostReason?: string;
+  lostReason?: LostReason | string;
+  lostReasonNote?: string;
+  outcomeUpdatedBy?: mongoose.Types.ObjectId;
+  outcomeUpdatedAt?: Date;
   sourceEmailText?: string;
   customerContact?: string;
   createdAt: Date;
@@ -37,7 +54,21 @@ const RFQSchema = new Schema<IRFQ>(
       default: 'ESTIMATING',
       index: true,
     },
-    lostReason: { type: String },
+    lostReason: {
+      type: String,
+      enum: [...LOST_REASONS],
+    },
+    lostReasonNote: {
+      type: String,
+      trim: true,
+    },
+    outcomeUpdatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    outcomeUpdatedAt: {
+      type: Date,
+    },
     sourceEmailText: { type: String },
     customerContact: { type: String, trim: true },
   },
@@ -45,4 +76,5 @@ const RFQSchema = new Schema<IRFQ>(
 );
 
 export const RFQ = mongoose.model<IRFQ>('RFQ', RFQSchema);
+
 

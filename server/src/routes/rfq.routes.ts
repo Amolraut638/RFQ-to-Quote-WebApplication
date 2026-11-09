@@ -3,7 +3,13 @@
  */
 
 import { Router } from 'express';
-import { listRFQs, getRFQ, createRFQ, createRFQPart } from '../controllers/rfq.controller';
+import {
+  listRFQs,
+  getRFQ,
+  createRFQ,
+  createRFQPart,
+  updateRFQOutcomeHandler,
+} from '../controllers/rfq.controller';
 import {
   getCostingContextHandler,
   getCostingPreviewHandler,
@@ -31,6 +37,9 @@ router.post('/', authorizeRoles('ESTIMATOR'), createRFQ);
 
 /** POST /api/rfqs/:rfqId/parts — ESTIMATOR only */
 router.post('/:rfqId/parts', authorizeRoles('ESTIMATOR'), createRFQPart);
+
+/** PATCH /api/rfqs/:rfqId/outcome — SALES_HEAD only (WON | LOST commercial outcome) */
+router.patch('/:rfqId/outcome', authorizeRoles('SALES_HEAD'), updateRFQOutcomeHandler);
 
 /** GET  /api/rfqs/:rfqId/costing-context?partId=xxx&costingDate=... */
 router.get('/:rfqId/costing-context', getCostingContextHandler);

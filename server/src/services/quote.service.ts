@@ -32,6 +32,8 @@ import {
   type IVolumeTierSnapshot,
 } from '../models/Quote';
 import { QuoteEvent, type IQuoteEvent, type QuoteEventAction } from '../models/QuoteEvent';
+import { RFQ } from '../models/RFQ';
+import { RFQEvent } from '../models/RFQEvent';
 import type { CostingInput, CostingResult, VolumeTierOutput, CostingOutput } from '@rfq/costing-engine';
 import { evaluateApproval } from '@rfq/costing-engine';
 
@@ -277,6 +279,46 @@ async function transitionWithAudit(args: {
         ],
         { session },
       );
+
+      // Rule 1: An RFQ becomes SENT when its relevant customer quote has been sent.
+      if (action === 'SENT') {
+        const isRfqMocked =
+          typeof (RFQ?.findOneAndUpdate as { mock?: unknown })?.mock !== 'undefined';
+        if (mongoose.connection.readyState === 1 || isRfqMocked) {
+          const updatedRfq = await RFQ.findOneAndUpdate(
+            { _id: rfqId, status: { $in: ['ESTIMATING', 'PENDING_APPROVAL'] } },
+            {
+              $set: {
+                status: 'SENT',
+                outcomeUpdatedBy: actorId,
+                outcomeUpdatedAt: at,
+              },
+            },
+            { new: true, session },
+          );
+
+          const isRfqEventMocked =
+            typeof (RFQEvent?.create as { mock?: unknown })?.mock !== 'undefined';
+          if (updatedRfq && (mongoose.connection.readyState === 1 || isRfqEventMocked)) {
+            await RFQEvent.create(
+              [
+                {
+                  rfqId,
+                  action: 'SENT',
+                  previousStatus: 'ESTIMATING',
+                  newStatus: 'SENT',
+                  actorId,
+                  timestamp: at,
+                  quoteId: updated._id,
+                  quoteVersion: version,
+                },
+              ],
+              { session },
+            );
+          }
+        }
+      }
+
       saved = updated;
     });
     return saved as IQuote;

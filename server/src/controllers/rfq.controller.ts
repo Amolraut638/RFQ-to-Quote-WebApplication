@@ -4,7 +4,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import * as RFQService from '../services/rfq.service';
-import { CreateRFQSchema } from '../validators/rfq.validator';
+import { RFQServiceError } from '../services/rfq.service';
+import { CreateRFQSchema, UpdateRFQOutcomeSchema } from '../validators/rfq.validator';
 import { createPart, CreatePartSchema, PartServiceError } from '../services/part.service';
 
 export async function listRFQs(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -15,7 +16,10 @@ export async function listRFQs(req: Request, res: Response, next: NextFunction):
     const data = rfqs.map((rfq: any) => ({
       ...rfq,
       isOverdue:
-        rfq.dueDate < now && rfq.status !== 'WON' && rfq.status !== 'LOST' && rfq.status !== 'SENT',
+        new Date(rfq.dueDate) < now &&
+        rfq.status !== 'WON' &&
+        rfq.status !== 'LOST' &&
+        rfq.status !== 'SENT',
     }));
     res.json({ success: true, data });
   } catch (err) {
@@ -27,10 +31,18 @@ export async function getRFQ(req: Request, res: Response, next: NextFunction): P
   try {
     const rfq = await RFQService.getRFQById(req.params.id);
     if (!rfq) {
-      res.status(404).json({ error: 'RFQ not found' });
+      res.status(404).json({ error: 'RFQ not found', code: 'RFQ_NOT_FOUND' });
       return;
     }
-    res.json({ success: true, data: rfq });
+    const now = new Date();
+    const dueDate = rfq.dueDate ? new Date(rfq.dueDate as string | Date) : null;
+    const isOverdue =
+      dueDate !== null &&
+      dueDate < now &&
+      rfq.status !== 'WON' &&
+      rfq.status !== 'LOST' &&
+      rfq.status !== 'SENT';
+    res.json({ success: true, data: { ...rfq, isOverdue } });
   } catch (err) {
     next(err);
   }
@@ -76,4 +88,45 @@ export async function createRFQPart(req: Request, res: Response, next: NextFunct
     next(err);
   }
 }
+
+/**
+ * PATCH /api/rfqs/:rfqId/outcome
+ * Updates the commercial outcome of an RFQ (WON | LOST).
+ * Restricted to SALES_HEAD role.
+ */
+export async function updateRFQOutcomeHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const parsed = UpdateRFQOutcomeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Validation failed',
+        code: 'VALIDATION_FAILED',
+        details: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const result = await RFQService.updateRFQOutcome({
+      rfqId: req.params.rfqId,
+      outcome: parsed.data.outcome,
+      lostReason: parsed.data.lostReason,
+      lostReasonNote: parsed.data.lostReasonNote,
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    if (err instanceof RFQServiceError) {
+      res.status(err.statusCode).json({ error: err.message, code: err.code });
+      return;
+    }
+    next(err);
+  }
+}
+
 
