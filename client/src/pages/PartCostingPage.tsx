@@ -754,7 +754,7 @@ export function PartCostingPage() {
                               <div className="text-xs text-gray-500 font-mono">{m.rfqNo}</div>
                             </td>
                             <td>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="font-mono font-semibold text-gray-900">
                                   v{m.quoteVersion}
                                 </span>
@@ -770,6 +770,11 @@ export function PartCostingPage() {
                                 >
                                   {m.historicalQuoteStatus}
                                 </Badge>
+                                {m.importSource === 'HISTORICAL_EXCEL' && (
+                                  <Badge variant="yellow">
+                                    {m.isSyntheticDemo ? 'Imported · Synthetic Demo' : 'Imported'}
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-xs text-gray-500 mt-0.5">
                                 {new Date(m.quoteDate).toLocaleDateString('en-IN', {
@@ -778,6 +783,11 @@ export function PartCostingPage() {
                                   year: 'numeric',
                                 })}
                               </div>
+                              {m.priceDiscrepancyFlag && m.historicalStatedPriceExGst && (
+                                <div className="text-[11px] text-amber-800 mt-0.5">
+                                  Sheet Stated: ₹{m.historicalStatedPriceExGst}
+                                </div>
+                              )}
                             </td>
                             <td>
                               <div className="font-medium text-gray-900">{m.material}</div>

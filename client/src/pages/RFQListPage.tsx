@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { rfqApi } from '../api';
-import { LostReason, QuoteStatus, RFQ, RFQStatus } from '../types';
+import {
+  HistoricalImportSummary,
+  ImportRowIssue,
+  LostReason,
+  QuoteStatus,
+  RFQ,
+  RFQStatus,
+} from '../types';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
@@ -117,6 +124,73 @@ export function RFQListPage() {
   const [lostReasonNote, setLostReasonNote] = useState('');
   const [lostModalError, setLostModalError] = useState('');
 
+  // Historical Quote Excel Import state
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [importMode, setImportMode] = useState<'UPLOAD' | 'SYNTHETIC_DEMO'>('SYNTHETIC_DEMO');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importSummary, setImportSummary] = useState<HistoricalImportSummary | null>(null);
+  const [issueFilter, setIssueFilter] = useState<string>('ALL');
+
+  async function handleDownloadTemplate() {
+    try {
+      const res = await rfqApi.downloadHistoricalTemplate();
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Historical-Quotes-Import-Template.xlsx';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setImportError('Failed to download Excel template.');
+    }
+  }
+
+  async function handleDownloadSyntheticDemo() {
+    try {
+      const res = await rfqApi.downloadSyntheticDemoWorkbook();
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Synthetic-1400-Historical-Quotes-Demo.xlsx';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setImportError('Failed to download 1,400-row synthetic demo workbook.');
+    }
+  }
+
+  async function handleRunHistoricalImport(dryRun: boolean) {
+    setImportError('');
+    if (importMode === 'UPLOAD' && !importFile) {
+      setImportError('Please choose an Excel (.xlsx/.xls) or CSV file first.');
+      return;
+    }
+    setImportBusy(true);
+    try {
+      const res = await rfqApi.importHistoricalQuotes({
+        file: importMode === 'UPLOAD' ? importFile : null,
+        useSyntheticDemo: importMode === 'SYNTHETIC_DEMO',
+        dryRun,
+      });
+      setImportSummary(res.data.data);
+      if (!dryRun) {
+        loadRfqs();
+      }
+    } catch (err: unknown) {
+      setImportError(err instanceof Error ? err.message : 'Historical quote import failed');
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  const filteredIssues: ImportRowIssue[] = useMemo(() => {
+    if (!importSummary) return [];
+    if (issueFilter === 'ALL') return importSummary.rowIssues;
+    return importSummary.rowIssues.filter((i) => i.status === issueFilter);
+  }, [importSummary, issueFilter]);
+
   function loadRfqs() {
     setLoading(true);
     setError('');
@@ -227,12 +301,276 @@ export function RFQListPage() {
             lifecycle status
           </p>
         </div>
-        {user?.role === 'ESTIMATOR' && (
-          <Link to="/intake">
-            <Button size="sm">+ AI-Assisted RFQ Intake</Button>
-          </Link>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant={showImportPanel ? 'primary' : 'secondary'}
+            onClick={() => setShowImportPanel((prev) => !prev)}
+          >
+            {showImportPanel ? 'Hide Historical Excel Import' : 'Import Historical Quotes (Excel)'}
+          </Button>
+          {user?.role === 'ESTIMATOR' && (
+            <Link to="/intake">
+              <Button size="sm">+ AI-Assisted RFQ Intake</Button>
+            </Link>
+          )}
+        </div>
       </div>
+
+      {/* Historical Quote Excel Import Panel */}
+      {showImportPanel && (
+        <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Historical Quote Excel Import
+                </h2>
+                <Badge variant="yellow">SYNTHETIC DEMO DATA SUPPORTED</Badge>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Deterministically imports historical quotes from Excel/CSV, preserving original
+                quotation dates, rates, and 3-tier costing snapshots. Incomplete rows are never
+                fabricated.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={() => void handleDownloadTemplate()}>
+                Download Template (.xlsx)
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleDownloadSyntheticDemo()}
+              >
+                Download 1,400-Row Synthetic Demo (.xlsx)
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-900">
+            <span className="font-semibold">Data Provenance Notice:</span> The built-in 1,400-row
+            Chakan automotive dataset is{' '}
+            <span className="font-mono font-semibold">SYNTHETIC DEMO DATA</span> generated for
+            demonstration and testing (1,340 complete quotes including 25 price-discrepancy rows,
+            25 intra-file duplicates, 25 incomplete legacy rows, and 10 validation-error rows). It
+            is never presented as actual customer NDA data.
+          </div>
+
+          {importError && (
+            <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+              {importError}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Source Dataset
+              </label>
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="importMode"
+                    checked={importMode === 'SYNTHETIC_DEMO'}
+                    onChange={() => setImportMode('SYNTHETIC_DEMO')}
+                    className="text-brand-600 focus:ring-brand-500"
+                  />
+                  <span className="text-gray-800 font-medium">
+                    1,400-Row Synthetic Chakan Automotive Dataset (Built-in)
+                  </span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="importMode"
+                    checked={importMode === 'UPLOAD'}
+                    onChange={() => setImportMode('UPLOAD')}
+                    className="text-brand-600 focus:ring-brand-500"
+                  />
+                  <span className="text-gray-800 font-medium">Upload Custom Excel/CSV File</span>
+                </label>
+              </div>
+
+              {importMode === 'UPLOAD' && (
+                <div className="pt-2">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                    className="block text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-800 hover:file:bg-gray-200"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={importBusy}
+                onClick={() => void handleRunHistoricalImport(true)}
+              >
+                {importBusy ? 'Processing…' : 'Run Dry-Run Preview'}
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={importBusy}
+                onClick={() => void handleRunHistoricalImport(false)}
+              >
+                {importBusy ? 'Importing…' : 'Commit Historical Import'}
+              </Button>
+            </div>
+          </div>
+
+          {importSummary && (
+            <div className="space-y-4 pt-3 border-t border-gray-200">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    Import Summary ({importSummary.dryRun ? 'Dry-Run Preview' : 'Committed'})
+                  </span>
+                  <span className="font-mono text-xs text-gray-500">
+                    Batch: {importSummary.importBatchId}
+                  </span>
+                </div>
+                <span className="text-xs text-gray-500 tabular">
+                  Processed in {importSummary.durationMs} ms
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 text-xs">
+                <div className="p-2.5 rounded border border-gray-200 bg-gray-50">
+                  <div className="text-gray-500">Total Rows</div>
+                  <div className="text-base font-bold text-gray-900 tabular mt-0.5">
+                    {importSummary.totalRowsRead.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded border border-emerald-200 bg-emerald-50/60">
+                  <div className="text-emerald-800">
+                    {importSummary.dryRun ? 'Ready to Import' : 'Imported Quotes'}
+                  </div>
+                  <div className="text-base font-bold text-emerald-900 tabular mt-0.5">
+                    {(importSummary.dryRun
+                      ? importSummary.completeRowsCount
+                      : importSummary.importedQuotesCount
+                    ).toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded border border-blue-200 bg-blue-50/60">
+                  <div className="text-blue-800">New RFQs</div>
+                  <div className="text-base font-bold text-blue-900 tabular mt-0.5">
+                    {importSummary.createdRfqsCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded border border-amber-200 bg-amber-50/60">
+                  <div className="text-amber-800">Price Discrepancies</div>
+                  <div className="text-base font-bold text-amber-900 tabular mt-0.5">
+                    {importSummary.priceDiscrepancyCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded border border-gray-200 bg-gray-50">
+                  <div className="text-gray-600">Skipped (Incomplete)</div>
+                  <div className="text-base font-bold text-gray-800 tabular mt-0.5">
+                    {importSummary.skippedIncompleteCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded border border-gray-200 bg-gray-50">
+                  <div className="text-gray-600">Skipped (File Dup)</div>
+                  <div className="text-base font-bold text-gray-800 tabular mt-0.5">
+                    {importSummary.skippedDuplicateInFileCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded border border-gray-200 bg-gray-50">
+                  <div className="text-gray-600">Skipped (In DB)</div>
+                  <div className="text-base font-bold text-gray-800 tabular mt-0.5">
+                    {importSummary.skippedAlreadyExistsCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded border border-red-200 bg-red-50/60">
+                  <div className="text-red-800">Failed Validation</div>
+                  <div className="text-base font-bold text-red-900 tabular mt-0.5">
+                    {importSummary.failedValidationCount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+              </div>
+
+              {importSummary.rowIssues.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-gray-700">
+                      Row-Level Report ({filteredIssues.length} of {importSummary.rowIssues.length}{' '}
+                      flagged rows)
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[
+                        { key: 'ALL', label: 'All Flagged' },
+                        { key: 'PRICE_DISCREPANCY', label: 'Price Discrepancies' },
+                        { key: 'SKIPPED_INCOMPLETE', label: 'Incomplete Inputs' },
+                        { key: 'SKIPPED_DUPLICATE_IN_FILE', label: 'File Duplicates' },
+                        { key: 'SKIPPED_ALREADY_EXISTS', label: 'Already in DB' },
+                        { key: 'FAILED_VALIDATION', label: 'Failed Validation' },
+                      ].map((tab) => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setIssueFilter(tab.key)}
+                          className={`px-2 py-1 rounded text-[11px] font-medium ${
+                            issueFilter === tab.key
+                              ? 'bg-gray-800 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-md">
+                    <table className="data-table text-xs">
+                      <thead>
+                        <tr>
+                          <th>Row</th>
+                          <th>RFQ No.</th>
+                          <th>Part</th>
+                          <th>Classification</th>
+                          <th>Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredIssues.slice(0, 100).map((iss, idx) => (
+                          <tr key={`${iss.rowNumber}-${iss.status}-${idx}`}>
+                            <td className="font-mono tabular text-gray-600">#{iss.rowNumber}</td>
+                            <td className="font-mono font-medium text-gray-900">{iss.rfqNo}</td>
+                            <td className="text-gray-700">{iss.partName}</td>
+                            <td>
+                              <Badge
+                                variant={
+                                  iss.status === 'FAILED_VALIDATION'
+                                    ? 'red'
+                                    : iss.status === 'PRICE_DISCREPANCY'
+                                    ? 'yellow'
+                                    : 'gray'
+                                }
+                              >
+                                {iss.status}
+                              </Badge>
+                            </td>
+                            <td className="text-gray-600">{iss.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Commercial Outcome Filter Bar */}
       {!loading && !error && rfqs.length > 0 && (
@@ -335,12 +673,19 @@ export function RFQListPage() {
                   return (
                     <tr key={rfq._id} className={rfq.isOverdue ? 'bg-red-50/60' : ''}>
                       <td className="font-mono text-xs font-medium text-gray-900">
-                        <Link
-                          to={`/rfqs/${rfq._id}`}
-                          className="hover:text-brand-600 hover:underline"
-                        >
-                          {rfq.rfqNo}
-                        </Link>
+                        <div className="flex flex-col items-start gap-0.5">
+                          <Link
+                            to={`/rfqs/${rfq._id}`}
+                            className="hover:text-brand-600 hover:underline"
+                          >
+                            {rfq.rfqNo}
+                          </Link>
+                          {rfq.importSource === 'HISTORICAL_EXCEL' && (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-amber-50 border border-amber-200 text-[10px] font-sans font-medium text-amber-800">
+                              {rfq.isSyntheticDemo ? 'Imported · Synthetic Demo' : 'Imported Excel'}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="text-gray-900 font-medium">{rfq.customer}</td>
                       <td>

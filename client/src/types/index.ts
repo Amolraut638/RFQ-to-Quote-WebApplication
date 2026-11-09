@@ -58,8 +58,48 @@ export interface RFQ {
   latestQuoteVersion?: number | null;
   hasSentQuote?: boolean;
   outcomeEvents?: RFQEvent[];
+  importSource?: 'HISTORICAL_EXCEL' | null;
+  importBatchId?: string | null;
+  isSyntheticDemo?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export type ImportRowStatus =
+  | 'IMPORTED'
+  | 'SKIPPED_INCOMPLETE'
+  | 'SKIPPED_DUPLICATE_IN_FILE'
+  | 'SKIPPED_ALREADY_EXISTS'
+  | 'FAILED_VALIDATION';
+
+export interface ImportRowIssue {
+  rowNumber: number;
+  rfqNo: string;
+  partName: string;
+  status: ImportRowStatus | 'PRICE_DISCREPANCY';
+  reason: string;
+  missingFields?: string[];
+  statedPriceExGst?: string;
+  calculatedPriceExGst?: string;
+  priceDiscrepancyDelta?: string;
+}
+
+export interface HistoricalImportSummary {
+  dryRun: boolean;
+  importBatchId: string;
+  totalRowsRead: number;
+  completeRowsCount: number;
+  importedQuotesCount: number;
+  createdRfqsCount: number;
+  createdPartsCount: number;
+  skippedDuplicateInFileCount: number;
+  skippedAlreadyExistsCount: number;
+  skippedIncompleteCount: number;
+  failedValidationCount: number;
+  priceDiscrepancyCount: number;
+  syntheticDemoRowsCount: number;
+  durationMs: number;
+  rowIssues: ImportRowIssue[];
 }
 
 export interface Part {
@@ -411,6 +451,11 @@ export interface HistoricalQuoteMatch {
     similarName: boolean;
   };
   matchReasons: string[];
+  importSource?: 'HISTORICAL_EXCEL' | null;
+  isSyntheticDemo?: boolean;
+  historicalStatedPriceExGst?: string | null;
+  priceDiscrepancyFlag?: boolean;
+  priceDiscrepancyDelta?: string | null;
 }
 
 export interface SearchHistoricalQuotesResponse {

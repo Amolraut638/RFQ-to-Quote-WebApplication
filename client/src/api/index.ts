@@ -4,6 +4,7 @@ import {
   RFQ,
   RFQEvent,
   LostReason,
+  HistoricalImportSummary,
   Part,
   ApiResponse,
   CostingContext,
@@ -52,6 +53,38 @@ export const rfqApi = {
       `/api/rfqs/${rfqId}/outcome`,
       body,
     ),
+
+  downloadHistoricalTemplate: () =>
+    api.get('/api/rfqs/historical-import/template', { responseType: 'blob' }),
+
+  downloadSyntheticDemoWorkbook: () =>
+    api.get('/api/rfqs/historical-import/synthetic-demo', { responseType: 'blob' }),
+
+  importHistoricalQuotes: (params: {
+    file?: File | null;
+    useSyntheticDemo?: boolean;
+    dryRun?: boolean;
+  }) => {
+    const formData = new FormData();
+    if (params.file) {
+      formData.append('file', params.file);
+    }
+    if (params.useSyntheticDemo) {
+      formData.append('useSyntheticDemo', 'true');
+    }
+    if (params.dryRun) {
+      formData.append('dryRun', 'true');
+    }
+    const query = new URLSearchParams();
+    if (params.dryRun) query.set('dryRun', 'true');
+    if (params.useSyntheticDemo) query.set('useSyntheticDemo', 'true');
+    const qs = query.toString();
+    return api.post<ApiResponse<HistoricalImportSummary>>(
+      `/api/rfqs/historical-import${qs ? `?${qs}` : ''}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+  },
 };
 
 export const costingApi = {
