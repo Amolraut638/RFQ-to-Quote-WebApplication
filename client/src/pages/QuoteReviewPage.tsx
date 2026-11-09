@@ -183,7 +183,7 @@ function TierGrid({ tiers }: { tiers: VolumeTier[] }) {
       <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
         Volume Tiers
       </h2>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {tiers.map((tier) => {
           const isBase = tier.tierPercentage === 100;
           return (
@@ -401,7 +401,7 @@ export function QuoteReviewPage() {
   const canMarkSent = ['APPROVED', 'READY_FOR_SALES'].includes(quote.status);
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Breadcrumb */}
       <button
         onClick={() => navigate('/approval')}
@@ -673,38 +673,40 @@ export function QuoteReviewPage() {
             Audit Trail
           </h2>
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Action</th>
-                  <th>Actor</th>
-                  <th>Timestamp</th>
-                  <th>Comment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((event) => {
-                  const actor =
-                    typeof event.actorId === 'object'
-                      ? (event.actorId as PopulatedUserRef).name
-                      : event.actorId;
-                  return (
-                    <tr key={event._id}>
-                      <td>
-                        <Badge variant={actionVariant(event.action)}>
-                          {actionLabel(event.action)}
-                        </Badge>
-                      </td>
-                      <td className="text-sm text-gray-700">{actor}</td>
-                      <td className="tabular text-sm text-gray-500">
-                        {formatDateTime(event.timestamp)}
-                      </td>
-                      <td className="text-sm text-gray-600">{event.comment ?? '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Timestamp</th>
+                    <th>Comment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((event) => {
+                    const actor =
+                      typeof event.actorId === 'object'
+                        ? (event.actorId as PopulatedUserRef).name
+                        : event.actorId;
+                    return (
+                      <tr key={event._id}>
+                        <td className="whitespace-nowrap">
+                          <Badge variant={actionVariant(event.action)}>
+                            {actionLabel(event.action)}
+                          </Badge>
+                        </td>
+                        <td className="text-sm text-gray-700 whitespace-nowrap">{actor}</td>
+                        <td className="tabular text-sm text-gray-500 whitespace-nowrap">
+                          {formatDateTime(event.timestamp)}
+                        </td>
+                        <td className="text-sm text-gray-600">{event.comment ?? '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}

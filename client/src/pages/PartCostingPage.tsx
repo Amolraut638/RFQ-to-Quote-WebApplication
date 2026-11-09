@@ -339,7 +339,7 @@ export function PartCostingPage() {
   const { part, materialRate, rateSettings, availableMachines } = context;
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-sm">
         <Link to="/rfqs" className="text-brand-600 hover:underline">RFQ Register</Link>
@@ -484,29 +484,31 @@ export function PartCostingPage() {
                     </div>
                   </div>
 
-                  <div className="border border-gray-200 rounded overflow-hidden">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          <th>Suggested Operation</th>
-                          <th>Machine</th>
-                          <th>Historical Cycle Time (min)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {routingSuggestion.suggestedOperations.map((so, idx) => (
-                          <tr key={idx}>
-                            <td className="text-xs text-gray-500">{idx + 1}</td>
-                            <td className="font-medium text-gray-900">{so.operationName}</td>
-                            <td className="text-gray-700">{so.machine}</td>
-                            <td className="tabular font-mono text-gray-900">
-                              {so.cycleTimeMinutes}
-                            </td>
+                  <div className="border border-gray-200 rounded-md overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Suggested Operation</th>
+                            <th>Machine</th>
+                            <th className="text-right">Historical Cycle Time (min)</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {routingSuggestion.suggestedOperations.map((so, idx) => (
+                            <tr key={idx}>
+                              <td className="text-xs text-gray-500 tabular">{idx + 1}</td>
+                              <td className="font-medium text-gray-900">{so.operationName}</td>
+                              <td className="text-gray-700">{so.machine}</td>
+                              <td className="tabular font-mono text-right text-gray-900">
+                                {so.cycleTimeMinutes}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -549,12 +551,12 @@ export function PartCostingPage() {
                   placeholder="e.g. Turning"
                 />
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-gray-700">Machine</label>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-gray-700 leading-5">Machine</label>
                   <select
                     value={op.machine}
                     onChange={(e) => updateOp(op.id, 'machine', e.target.value)}
-                    className="block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="block w-full h-9 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
                   >
                     {availableMachines.length === 0 && (
                       <option value="">No machines available</option>
@@ -566,10 +568,10 @@ export function PartCostingPage() {
                     ))}
                   </select>
                   {formErrors[`op_${i}_machine`] && (
-                    <p className="text-xs text-red-600">{formErrors[`op_${i}_machine`]}</p>
+                    <p className="text-xs text-red-600 leading-4">{formErrors[`op_${i}_machine`]}</p>
                   )}
                   {machineInfo && (
-                    <p className="text-xs text-gray-500 tabular">
+                    <p className="text-xs text-gray-500 tabular leading-4">
                       ₹{parseFloat(machineInfo.hourRate).toFixed(2)}/hr ·{' '}
                       {new Date(machineInfo.effectiveFrom).toLocaleDateString('en-IN', {
                         month: 'short',
@@ -592,19 +594,24 @@ export function PartCostingPage() {
                   placeholder="e.g. 3.2"
                 />
 
-                <div className="flex items-end pb-0.5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={ops.length === 1}
-                    onClick={() => removeOp(op.id)}
-                    aria-label={`Remove operation ${i + 1}`}
-                    title="Remove routing operation"
-                    className="text-red-500 hover:text-red-700 disabled:text-gray-300"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
-                    <span>Remove</span>
-                  </Button>
+                <div className="flex flex-col gap-1.5 sm:items-end">
+                  <span className="hidden sm:block text-xs leading-5 select-none" aria-hidden="true">
+                    &nbsp;
+                  </span>
+                  <div className="h-9 flex items-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={ops.length === 1}
+                      onClick={() => removeOp(op.id)}
+                      aria-label={`Remove operation ${i + 1}`}
+                      title="Remove routing operation"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:text-gray-300"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                      <span>Remove</span>
+                    </Button>
+                  </div>
                 </div>
               </div>
             );
@@ -825,20 +832,20 @@ export function PartCostingPage() {
                                 </div>
                               )}
                             </td>
-                            <td>
+                            <td className="whitespace-nowrap">
                               <div className="font-medium text-gray-900">{m.material}</div>
                               <div className="text-xs text-gray-500 tabular">
                                 {m.partWeightKg.toFixed(3)} kg
                               </div>
                             </td>
-                            <td className="text-right tabular font-medium text-gray-900">
+                            <td className="text-right tabular font-medium text-gray-900 whitespace-nowrap">
                               ₹
                               {parseFloat(m.historicalPricePerPieceExGst).toLocaleString('en-IN', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
                               })}
                             </td>
-                            <td className="text-right tabular">
+                            <td className="text-right tabular whitespace-nowrap">
                               <div className="text-gray-900">
                                 {m.historicalAnnualVolume.toLocaleString('en-IN')} pcs
                               </div>
@@ -871,7 +878,7 @@ export function PartCostingPage() {
                                 {m.matchReasons.join(' · ')}
                               </p>
                             </td>
-                            <td className="text-right">
+                            <td className="text-right whitespace-nowrap">
                               <Button
                                 variant={isSelected ? 'primary' : 'secondary'}
                                 size="sm"

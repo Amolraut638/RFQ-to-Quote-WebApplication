@@ -199,7 +199,7 @@ export function CostingResultsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-sm">
         <Link to="/rfqs" className="text-brand-600 hover:underline">RFQ Register</Link>
@@ -269,7 +269,7 @@ export function CostingResultsPage() {
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
           Volume Tiers
         </h2>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {volumeTiers.map((tier, i) => (
             <TierCard key={tier.tierName} tier={tier} isBase={i === baseTierIndex} />
           ))}

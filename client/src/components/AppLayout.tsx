@@ -50,22 +50,25 @@ export function AppLayout() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Top navigation */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
             {/* Brand */}
             <div className="flex items-center gap-6">
-              <span className="inline-flex items-center gap-2 font-semibold text-gray-900 text-sm">
+              <Link
+                to="/rfqs"
+                className="inline-flex items-center gap-2 font-semibold text-gray-900 text-sm hover:text-brand-700 transition-colors"
+              >
                 <Calculator className="w-4 h-4 text-brand-600 shrink-0" strokeWidth={1.8} />
                 <span>RFQ-to-Quote</span>
-              </span>
-              <nav className="hidden sm:flex items-center gap-1">
+              </Link>
+              <nav className="hidden sm:flex items-center gap-1" aria-label="Main navigation">
                 {navLinks.map(({ to, label, Icon }) => (
                   <Link
                     key={to}
                     to={to}
                     className={[
-                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors',
+                      'inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-colors',
                       location.pathname.startsWith(to)
                         ? 'bg-brand-50 text-brand-700'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
@@ -82,7 +85,7 @@ export function AppLayout() {
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex items-center gap-2">
                 <User className="w-4 h-4 text-gray-400 shrink-0" strokeWidth={1.8} />
-                <span className="text-sm text-gray-700">{user.name}</span>
+                <span className="text-sm font-medium text-gray-700">{user.name}</span>
                 <Badge variant={roleBadgeVariant(user.role)}>{roleLabel(user.role)}</Badge>
               </div>
               <Button variant="ghost" size="sm" onClick={handleLogout}>
@@ -90,11 +93,36 @@ export function AppLayout() {
               </Button>
             </div>
           </div>
+
+          {/* Mobile navigation bar */}
+          <nav
+            className="flex sm:hidden items-center justify-between gap-2 border-t border-gray-100 py-2 overflow-x-auto"
+            aria-label="Mobile navigation"
+          >
+            <div className="flex items-center gap-1">
+              {navLinks.map(({ to, label, Icon }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  className={[
+                    'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors',
+                    location.pathname.startsWith(to)
+                      ? 'bg-brand-50 text-brand-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  ].join(' ')}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                  <span>{label}</span>
+                </Link>
+              ))}
+            </div>
+            <Badge variant={roleBadgeVariant(user.role)}>{roleLabel(user.role)}</Badge>
+          </nav>
         </div>
       </header>
 
       {/* Page content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <Outlet />
       </main>
     </div>

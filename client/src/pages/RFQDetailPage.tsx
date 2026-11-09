@@ -75,13 +75,13 @@ function rfqStatusIcon(status: RFQStatus) {
   switch (status) {
     case 'ESTIMATING':
     case 'PENDING_APPROVAL':
-      return <Clock className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+      return <Clock className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />;
     case 'SENT':
-      return <Send className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+      return <Send className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />;
     case 'WON':
-      return <Trophy className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+      return <Trophy className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />;
     case 'LOST':
-      return <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+      return <TrendingDown className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />;
   }
 }
 
@@ -183,7 +183,7 @@ function directionBadge(direction: 'INCREASED' | 'DECREASED' | 'UNCHANGED') {
   if (direction === 'INCREASED') {
     return (
       <Badge variant="yellow">
-        <TrendingUp className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+        <TrendingUp className="w-3 h-3 shrink-0" strokeWidth={1.8} />
         <span>Increased</span>
       </Badge>
     );
@@ -191,7 +191,7 @@ function directionBadge(direction: 'INCREASED' | 'DECREASED' | 'UNCHANGED') {
   if (direction === 'DECREASED') {
     return (
       <Badge variant="green">
-        <TrendingDown className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+        <TrendingDown className="w-3 h-3 shrink-0" strokeWidth={1.8} />
         <span>Decreased</span>
       </Badge>
     );
@@ -446,7 +446,7 @@ export function RFQDetailPage() {
               )}
               {rfq.isOverdue && (
                 <Badge variant="red">
-                  <AlertTriangle className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
                   <span>Overdue</span>
                 </Badge>
               )}
@@ -570,8 +570,9 @@ export function RFQDetailPage() {
             </div>
 
             {lostModalError && (
-              <div className="p-2.5 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-                {lostModalError}
+              <div className="p-2.5 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+                <span>{lostModalError}</span>
               </div>
             )}
 
@@ -587,7 +588,7 @@ export function RFQDetailPage() {
                   id="detail-lost-reason-select"
                   value={selectedLostReason}
                   onChange={(e) => setSelectedLostReason(e.target.value as LostReason | '')}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full h-9 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Select a reason…</option>
                   {LOST_REASON_OPTIONS.map((opt) => (
@@ -664,46 +665,48 @@ export function RFQDetailPage() {
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Part Name</th>
-                  <th>Material</th>
-                  <th className="text-right">Gross Weight (kg)</th>
-                  <th className="text-right">Annual Volume (pcs)</th>
-                  {user?.role === 'ESTIMATOR' && <th></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rfq.parts.map((part) => (
-                  <tr key={part._id}>
-                    <td className="font-medium text-gray-900">{part.partName}</td>
-                    <td className="text-gray-700">{part.material}</td>
-                    <td className="tabular text-right text-gray-700">
-                      {part.grossWeightKg.toFixed(3)}
-                    </td>
-                    <td className="tabular text-right text-gray-700">
-                      {part.annualVolume.toLocaleString('en-IN')}
-                    </td>
-                    {user?.role === 'ESTIMATOR' && (
-                      <td className="text-right">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            navigate(`/rfqs/${id}/parts/${part._id}/costing`)
-                          }
-                        >
-                          <Calculator className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
-                          <span>Cost This Part</span>
-                          <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
-                        </Button>
-                      </td>
-                    )}
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Part Name</th>
+                    <th>Material</th>
+                    <th className="text-right">Gross Weight (kg)</th>
+                    <th className="text-right">Annual Volume (pcs)</th>
+                    {user?.role === 'ESTIMATOR' && <th className="text-right">Action</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rfq.parts.map((part) => (
+                    <tr key={part._id}>
+                      <td className="font-medium text-gray-900">{part.partName}</td>
+                      <td className="text-gray-700 whitespace-nowrap">{part.material}</td>
+                      <td className="tabular text-right text-gray-700 whitespace-nowrap">
+                        {part.grossWeightKg.toFixed(3)}
+                      </td>
+                      <td className="tabular text-right text-gray-700 whitespace-nowrap">
+                        {part.annualVolume.toLocaleString('en-IN')}
+                      </td>
+                      {user?.role === 'ESTIMATOR' && (
+                        <td className="text-right whitespace-nowrap">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              navigate(`/rfqs/${id}/parts/${part._id}/costing`)
+                            }
+                          >
+                            <Calculator className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                            <span>Cost This Part</span>
+                            <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                          </Button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -753,82 +756,84 @@ export function RFQDetailPage() {
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Version</th>
-                  <th>Status</th>
-                  <th className="text-right">Annual Value (Ex-GST)</th>
-                  <th>Costing Date</th>
-                  <th>Created</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quotes.map((q) => (
-                  <tr key={q._id}>
-                    <td className="font-mono font-semibold text-gray-900">
-                      <div className="flex items-center gap-2">
-                        <span>v{q.version}</span>
-                        {q.importSource === 'HISTORICAL_EXCEL' && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                            {q.isSyntheticDemo ? 'Imported · Synthetic Demo' : 'Imported Excel'}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <Badge variant={quoteStatusVariant(q.status)}>
-                        {quoteStatusLabel(q.status)}
-                      </Badge>
-                    </td>
-                    <td className="tabular text-right text-gray-900 font-medium">
-                      <div>{formatInr(q.annualQuotationValue)}</div>
-                      {q.priceDiscrepancyFlag && q.historicalStatedPriceExGst && (
-                        <div
-                          className="text-[11px] font-normal text-amber-700"
-                          title={`Historical sheet stated Ex-GST unit price ₹${q.historicalStatedPriceExGst} differs from deterministic engine calculation (Δ ₹${q.priceDiscrepancyDelta ?? '0.00'})`}
-                        >
-                          Sheet stated: ₹{q.historicalStatedPriceExGst}/pc (Δ ₹{q.priceDiscrepancyDelta ?? '0.00'})
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Version</th>
+                    <th>Status</th>
+                    <th className="text-right">Annual Value (Ex-GST)</th>
+                    <th>Costing Date</th>
+                    <th>Created</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quotes.map((q) => (
+                    <tr key={q._id}>
+                      <td className="font-mono font-semibold text-gray-900 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span>v{q.version}</span>
+                          {q.importSource === 'HISTORICAL_EXCEL' && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
+                              {q.isSyntheticDemo ? 'Imported · Synthetic Demo' : 'Imported Excel'}
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="tabular text-sm text-gray-600">
-                      {formatDate(q.costingDate)}
-                    </td>
-                    <td className="tabular text-sm text-gray-500">
-                      {formatDate(q.createdAt)}
-                    </td>
-                    <td className="text-right">
-                      <div className="inline-flex items-center gap-2 justify-end">
-                        {quotes.length >= 2 && q.version > 1 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenCompare(q.version - 1, q.version)}
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <Badge variant={quoteStatusVariant(q.status)}>
+                          {quoteStatusLabel(q.status)}
+                        </Badge>
+                      </td>
+                      <td className="tabular text-right text-gray-900 font-medium whitespace-nowrap">
+                        <div>{formatInr(q.annualQuotationValue)}</div>
+                        {q.priceDiscrepancyFlag && q.historicalStatedPriceExGst && (
+                          <div
+                            className="text-[11px] font-normal text-amber-700"
+                            title={`Historical sheet stated Ex-GST unit price ₹${q.historicalStatedPriceExGst} differs from deterministic engine calculation (Δ ₹${q.priceDiscrepancyDelta ?? '0.00'})`}
                           >
-                            Compare v{q.version - 1} → v{q.version}
-                          </Button>
+                            Sheet stated: ₹{q.historicalStatedPriceExGst}/pc (Δ ₹{q.priceDiscrepancyDelta ?? '0.00'})
+                          </div>
                         )}
-                        {user?.role === 'SALES_HEAD' &&
-                          ['PENDING_APPROVAL', 'APPROVED', 'READY_FOR_SALES', 'SENT'].includes(
-                            q.status,
-                          ) && (
+                      </td>
+                      <td className="tabular text-sm text-gray-600 whitespace-nowrap">
+                        {formatDate(q.costingDate)}
+                      </td>
+                      <td className="tabular text-sm text-gray-500 whitespace-nowrap">
+                        {formatDate(q.createdAt)}
+                      </td>
+                      <td className="text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-2 justify-end">
+                          {quotes.length >= 2 && q.version > 1 && (
                             <Button
-                              variant="secondary"
+                              variant="ghost"
                               size="sm"
-                              onClick={() => navigate(`/approvals/${q._id}`)}
+                              onClick={() => handleOpenCompare(q.version - 1, q.version)}
                             >
-                              <span>Review</span>
-                              <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                              Compare v{q.version - 1} → v{q.version}
                             </Button>
                           )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          {user?.role === 'SALES_HEAD' &&
+                            ['PENDING_APPROVAL', 'APPROVED', 'READY_FOR_SALES', 'SENT'].includes(
+                              q.status,
+                            ) && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => navigate(`/approvals/${q._id}`)}
+                              >
+                                <span>Review</span>
+                                <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                              </Button>
+                            )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -855,7 +860,7 @@ export function RFQDetailPage() {
                 <select
                   value={versionA}
                   onChange={(e) => setVersionA(Number(e.target.value))}
-                  className="rounded border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="h-8 rounded-md border border-gray-300 bg-white px-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   {quotes.map((q) => (
                     <option key={q._id} value={q.version}>
@@ -870,7 +875,7 @@ export function RFQDetailPage() {
                 <select
                   value={versionB}
                   onChange={(e) => setVersionB(Number(e.target.value))}
-                  className="rounded border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="h-8 rounded-md border border-gray-300 bg-white px-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   {quotes.map((q) => (
                     <option key={q._id} value={q.version}>
@@ -1068,7 +1073,7 @@ export function RFQDetailPage() {
                           <th className="text-right">v{revisionComparison.versionB.version}</th>
                           <th className="text-right">Absolute Diff</th>
                           <th className="text-right">% Diff</th>
-                          <th>Change</th>
+                          <th className="text-right">Change</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1090,21 +1095,21 @@ export function RFQDetailPage() {
                                   </span>
                                 )}
                               </td>
-                              <td className="text-right tabular text-gray-700">
+                              <td className="text-right tabular text-gray-700 whitespace-nowrap">
                                 {formatUnitValue(row.versionAValue, row.unit)}
                               </td>
-                              <td className="text-right tabular text-gray-900">
+                              <td className="text-right tabular text-gray-900 whitespace-nowrap">
                                 {formatUnitValue(row.versionBValue, row.unit)}
                               </td>
                               <td
-                                className={`text-right tabular font-medium ${directionColorClass(
+                                className={`text-right tabular font-medium whitespace-nowrap ${directionColorClass(
                                   row.direction,
                                 )}`}
                               >
                                 {formatUnitDelta(row.absoluteDifference, row.unit)}
                               </td>
                               <td
-                                className={`text-right tabular font-mono text-xs ${directionColorClass(
+                                className={`text-right tabular font-mono text-xs whitespace-nowrap ${directionColorClass(
                                   row.direction,
                                 )}`}
                               >
@@ -1114,7 +1119,9 @@ export function RFQDetailPage() {
                                       parseFloat(row.percentageDifference) > 0 ? '+' : ''
                                     }${row.percentageDifference}%`}
                               </td>
-                              <td>{directionBadge(row.direction)}</td>
+                              <td className="text-right whitespace-nowrap">
+                                {directionBadge(row.direction)}
+                              </td>
                             </tr>
                           );
                         })}
@@ -1464,28 +1471,28 @@ export function RFQDetailPage() {
                           <th className="text-right">v{revisionComparison.versionB.version}</th>
                           <th className="text-right">Absolute Diff</th>
                           <th className="text-right">% Diff</th>
-                          <th>Change</th>
+                          <th className="text-right">Change</th>
                         </tr>
                       </thead>
                       <tbody>
                         {revisionComparison.gstRows.map((row: RevisionComparisonRow) => (
                           <tr key={row.key}>
                             <td className="font-medium text-gray-900">{row.label}</td>
-                            <td className="text-right tabular text-gray-700">
+                            <td className="text-right tabular text-gray-700 whitespace-nowrap">
                               {formatUnitValue(row.versionAValue, row.unit)}
                             </td>
-                            <td className="text-right tabular text-gray-900">
+                            <td className="text-right tabular text-gray-900 whitespace-nowrap">
                               {formatUnitValue(row.versionBValue, row.unit)}
                             </td>
                             <td
-                              className={`text-right tabular font-medium ${directionColorClass(
+                              className={`text-right tabular font-medium whitespace-nowrap ${directionColorClass(
                                 row.direction,
                               )}`}
                             >
                               {formatUnitDelta(row.absoluteDifference, row.unit)}
                             </td>
                             <td
-                              className={`text-right tabular font-mono text-xs ${directionColorClass(
+                              className={`text-right tabular font-mono text-xs whitespace-nowrap ${directionColorClass(
                                 row.direction,
                               )}`}
                             >
@@ -1495,7 +1502,9 @@ export function RFQDetailPage() {
                                     parseFloat(row.percentageDifference) > 0 ? '+' : ''
                                   }${row.percentageDifference}%`}
                             </td>
-                            <td>{directionBadge(row.direction)}</td>
+                            <td className="text-right whitespace-nowrap">
+                              {directionBadge(row.direction)}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

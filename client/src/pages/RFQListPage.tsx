@@ -64,13 +64,13 @@ function statusIcon(status: RFQStatus) {
   switch (status) {
     case 'ESTIMATING':
     case 'PENDING_APPROVAL':
-      return <Clock className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+      return <Clock className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />;
     case 'SENT':
-      return <Send className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+      return <Send className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />;
     case 'WON':
-      return <Trophy className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+      return <Trophy className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />;
     case 'LOST':
-      return <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" strokeWidth={1.8} />;
+      return <TrendingDown className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />;
   }
 }
 
@@ -726,8 +726,8 @@ export function RFQListPage() {
 
                   return (
                     <tr key={rfq._id} className={rfq.isOverdue ? 'bg-red-50/60' : ''}>
-                      <td className="font-mono text-xs font-medium text-gray-900">
-                        <div className="flex flex-col items-start gap-0.5">
+                      <td className="font-mono text-xs font-medium text-gray-900 whitespace-nowrap">
+                        <div className="flex flex-col items-start gap-1">
                           <Link
                             to={`/rfqs/${rfq._id}`}
                             className="hover:text-brand-600 hover:underline"
@@ -735,21 +735,21 @@ export function RFQListPage() {
                             {rfq.rfqNo}
                           </Link>
                           {rfq.importSource === 'HISTORICAL_EXCEL' && (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-amber-50 border border-amber-200 text-[10px] font-sans font-medium text-amber-800">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-[10px] font-sans font-medium text-amber-800 whitespace-nowrap">
                               {rfq.isSyntheticDemo ? 'Imported · Synthetic Demo' : 'Imported Excel'}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="text-gray-900 font-medium">{rfq.customer}</td>
-                      <td>
+                      <td className="text-gray-900 font-medium min-w-[160px]">{rfq.customer}</td>
+                      <td className="whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-mono font-medium tabular">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-mono font-medium tabular shrink-0">
                             {partCount} {partCount === 1 ? 'part' : 'parts'}
                           </span>
                           {rfq.partName && (
                             <span
-                              className="text-xs text-gray-500 truncate max-w-[160px]"
+                              className="text-xs text-gray-500 truncate max-w-[150px]"
                               title={rfq.partName}
                             >
                               {rfq.partName}
@@ -757,23 +757,27 @@ export function RFQListPage() {
                           )}
                         </div>
                       </td>
-                      <td className="text-sm text-gray-600">{ownerName(rfq.ownerId)}</td>
-                      <td className="tabular text-sm">
-                        <span
-                          className={
-                            rfq.isOverdue ? 'text-red-600 font-medium' : 'text-gray-700'
-                          }
-                        >
-                          {formatDate(rfq.dueDate)}
-                        </span>
-                        {rfq.isOverdue && (
-                          <span className="ml-2 inline-flex items-center gap-0.5 text-xs text-red-500 font-medium">
-                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
-                            <span>Overdue</span>
-                          </span>
-                        )}
+                      <td className="text-sm text-gray-600 whitespace-nowrap">
+                        {ownerName(rfq.ownerId)}
                       </td>
-                      <td>
+                      <td className="tabular text-sm whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          <span
+                            className={
+                              rfq.isOverdue ? 'text-red-600 font-medium' : 'text-gray-700'
+                            }
+                          >
+                            {formatDate(rfq.dueDate)}
+                          </span>
+                          {rfq.isOverdue && (
+                            <span className="inline-flex items-center gap-0.5 text-xs text-red-500 font-medium">
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                              <span>Overdue</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap">
                         <div className="flex flex-col items-start gap-0.5">
                           <Badge variant={statusVariant(rfq.status)}>
                             {statusIcon(rfq.status)}
@@ -781,7 +785,7 @@ export function RFQListPage() {
                           </Badge>
                           {rfq.status === 'LOST' && rfq.lostReason && (
                             <span
-                              className="text-[11px] text-red-700 font-medium truncate max-w-[180px]"
+                              className="text-[11px] text-red-700 font-medium truncate max-w-[160px]"
                               title={
                                 rfq.lostReasonNote
                                   ? `${formatLostReason(rfq.lostReason)}: ${rfq.lostReasonNote}`
@@ -793,7 +797,7 @@ export function RFQListPage() {
                           )}
                         </div>
                       </td>
-                      <td>
+                      <td className="whitespace-nowrap">
                         {rfq.latestQuoteStatus ? (
                           <div className="inline-flex items-center gap-1.5">
                             {rfq.latestQuoteVersion != null && (
@@ -809,8 +813,8 @@ export function RFQListPage() {
                           <span className="text-xs text-gray-400">No quotes yet</span>
                         )}
                       </td>
-                      <td className="text-right">
-                        <div className="inline-flex items-center justify-end gap-2">
+                      <td className="text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1.5">
                           {canUpdateOutcome && (
                             <>
                               <Button
@@ -818,7 +822,7 @@ export function RFQListPage() {
                                 variant="secondary"
                                 disabled={isBusy}
                                 onClick={() => void handleMarkWon(rfq)}
-                                className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                                className="h-7 px-2.5 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50"
                               >
                                 <Trophy className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
                                 <span>{isBusy ? 'Saving…' : 'Mark Won'}</span>
@@ -828,7 +832,7 @@ export function RFQListPage() {
                                 variant="secondary"
                                 disabled={isBusy}
                                 onClick={() => openLostModal(rfq)}
-                                className="text-red-700 border-red-300 hover:bg-red-50"
+                                className="h-7 px-2.5 text-xs text-red-700 border-red-300 hover:bg-red-50"
                               >
                                 <TrendingDown className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
                                 <span>Mark Lost</span>
@@ -837,7 +841,7 @@ export function RFQListPage() {
                           )}
                           <Link
                             to={`/rfqs/${rfq._id}`}
-                            className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium ml-1"
+                            className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-md border border-gray-200 bg-white text-xs font-medium text-brand-600 hover:bg-brand-50 hover:border-brand-200 whitespace-nowrap transition-colors"
                           >
                             <span>View</span>
                             <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
@@ -873,8 +877,9 @@ export function RFQListPage() {
             </div>
 
             {lostModalError && (
-              <div className="p-2.5 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-                {lostModalError}
+              <div className="p-2.5 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+                <span>{lostModalError}</span>
               </div>
             )}
 
@@ -890,7 +895,7 @@ export function RFQListPage() {
                   id="lost-reason-select"
                   value={selectedLostReason}
                   onChange={(e) => setSelectedLostReason(e.target.value as LostReason | '')}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full h-9 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Select a reason…</option>
                   {LOST_REASON_OPTIONS.map((opt) => (

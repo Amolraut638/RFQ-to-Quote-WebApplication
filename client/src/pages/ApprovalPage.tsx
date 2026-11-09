@@ -122,49 +122,51 @@ export function ApprovalPage() {
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>RFQ No.</th>
-                  <th>Customer</th>
-                  <th>Version</th>
-                  <th className="text-right">Annual Value</th>
-                  <th>Submitted</th>
-                  <th>Estimator</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map((q) => (
-                  <tr key={q._id}>
-                    <td className="font-mono font-semibold text-gray-900">
-                      {getRfqNo(q.rfqId)}
-                    </td>
-                    <td className="text-gray-700">{getCustomer(q.rfqId)}</td>
-                    <td className="font-mono text-gray-700">v{q.version}</td>
-                    <td className="tabular text-right text-gray-900 font-medium">
-                      {formatInr(q.annualQuotationValue)}
-                    </td>
-                    <td className="tabular text-sm text-gray-500">
-                      {formatDate(q.submittedAt)}
-                    </td>
-                    <td className="text-sm text-gray-700">
-                      {getEstimatorName(q.createdBy)}
-                    </td>
-                    <td className="text-right">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => navigate(`/approvals/${q._id}`)}
-                      >
-                        <span>Review</span>
-                        <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
-                      </Button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>RFQ No.</th>
+                    <th>Customer</th>
+                    <th>Version</th>
+                    <th className="text-right">Annual Value</th>
+                    <th>Submitted</th>
+                    <th>Estimator</th>
+                    <th className="text-right">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pending.map((q) => (
+                    <tr key={q._id}>
+                      <td className="font-mono font-semibold text-gray-900 whitespace-nowrap">
+                        {getRfqNo(q.rfqId)}
+                      </td>
+                      <td className="text-gray-700">{getCustomer(q.rfqId)}</td>
+                      <td className="font-mono text-gray-700 whitespace-nowrap">v{q.version}</td>
+                      <td className="tabular text-right text-gray-900 font-medium whitespace-nowrap">
+                        {formatInr(q.annualQuotationValue)}
+                      </td>
+                      <td className="tabular text-sm text-gray-500 whitespace-nowrap">
+                        {formatDate(q.submittedAt)}
+                      </td>
+                      <td className="text-sm text-gray-700 whitespace-nowrap">
+                        {getEstimatorName(q.createdBy)}
+                      </td>
+                      <td className="text-right whitespace-nowrap">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => navigate(`/approvals/${q._id}`)}
+                        >
+                          <span>Review</span>
+                          <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.8} />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

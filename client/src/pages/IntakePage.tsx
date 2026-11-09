@@ -61,21 +61,21 @@ function fieldStatusBadge(status: FieldStatus) {
     case 'ACCEPTED':
       return (
         <Badge variant="green">
-          <CheckCircle className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+          <CheckCircle className="w-3 h-3 shrink-0" strokeWidth={1.8} />
           <span>Accepted</span>
         </Badge>
       );
     case 'EDITED':
       return (
         <Badge variant="blue">
-          <Pencil className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+          <Pencil className="w-3 h-3 shrink-0" strokeWidth={1.8} />
           <span>Edited</span>
         </Badge>
       );
     case 'REJECTED':
       return (
         <Badge variant="red">
-          <XCircle className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+          <XCircle className="w-3 h-3 shrink-0" strokeWidth={1.8} />
           <span>Rejected</span>
         </Badge>
       );
@@ -83,7 +83,7 @@ function fieldStatusBadge(status: FieldStatus) {
     default:
       return (
         <Badge variant="yellow">
-          <Clock className="w-3 h-3 mr-1 shrink-0" strokeWidth={1.8} />
+          <Clock className="w-3 h-3 shrink-0" strokeWidth={1.8} />
           <span>Pending Review</span>
         </Badge>
       );
@@ -290,7 +290,7 @@ export function IntakePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -502,120 +502,122 @@ export function IntakePage() {
             </div>
           </div>
 
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Field</th>
-                <th>Extracted / Current Value</th>
-                <th>Source Attribution</th>
-                <th>Status</th>
-                <th className="text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {RFQ_FIELDS_META.map((meta) => {
-                const field = findField('RFQ', -1, meta.key);
-                const rowEditKey = `RFQ:-1:${meta.key}`;
-                const isEditing = editingKey === rowEditKey;
-                const val = field?.value ?? null;
-                const isMissingRequired =
-                  meta.required && (val === null || String(val).trim() === '');
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Extracted / Current Value</th>
+                  <th>Source Attribution</th>
+                  <th>Status</th>
+                  <th className="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {RFQ_FIELDS_META.map((meta) => {
+                  const field = findField('RFQ', -1, meta.key);
+                  const rowEditKey = `RFQ:-1:${meta.key}`;
+                  const isEditing = editingKey === rowEditKey;
+                  const val = field?.value ?? null;
+                  const isMissingRequired =
+                    meta.required && (val === null || String(val).trim() === '');
 
-                return (
-                  <tr
-                    key={meta.key}
-                    className={isMissingRequired ? 'bg-amber-50/40' : undefined}
-                  >
-                    <td className="font-medium text-gray-900 text-sm">
-                      {meta.label}
-                      {meta.required && <span className="text-red-500 ml-0.5">*</span>}
-                      {meta.hint && (
-                        <p className="text-xs text-gray-400 font-normal">{meta.hint}</p>
-                      )}
-                    </td>
+                  return (
+                    <tr
+                      key={meta.key}
+                      className={isMissingRequired ? 'bg-amber-50/40' : undefined}
+                    >
+                      <td className="font-medium text-gray-900 text-sm whitespace-nowrap">
+                        {meta.label}
+                        {meta.required && <span className="text-red-500 ml-0.5">*</span>}
+                        {meta.hint && (
+                          <p className="text-xs text-gray-400 font-normal">{meta.hint}</p>
+                        )}
+                      </td>
 
-                    <td className="text-sm">
-                      {isEditing ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={editingValue}
-                            onChange={(e) => setEditingValue(e.target.value)}
-                            className="rounded border border-gray-300 px-2.5 py-1 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => saveEdit('RFQ', -1, meta.key)}
-                            loading={savingField}
-                          >
-                            Save
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEditingKey(null)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : val !== null && String(val).trim() !== '' ? (
-                        <span className="font-mono text-gray-900">{String(val)}</span>
-                      ) : (
-                        <span className="text-xs text-amber-700 font-medium">
-                          Not found in source — click Edit to enter
-                        </span>
-                      )}
-                    </td>
+                      <td className="text-sm">
+                        {isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              className="h-8 rounded-md border border-gray-300 px-2.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => saveEdit('RFQ', -1, meta.key)}
+                              loading={savingField}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingKey(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : val !== null && String(val).trim() !== '' ? (
+                          <span className="font-mono text-gray-900">{String(val)}</span>
+                        ) : (
+                          <span className="text-xs text-amber-700 font-medium">
+                            Not found in source — click Edit to enter
+                          </span>
+                        )}
+                      </td>
 
-                    <td>{formatProvenance(field)}</td>
+                      <td>{formatProvenance(field)}</td>
 
-                    <td>{fieldStatusBadge(field?.status ?? 'PENDING')}</td>
+                      <td className="whitespace-nowrap">{fieldStatusBadge(field?.status ?? 'PENDING')}</td>
 
-                    <td className="text-right">
-                      {draft.status !== 'COMMITTED' && !isEditing && (
-                        <div className="inline-flex items-center gap-1.5">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={
-                              savingField || val === null || String(val).trim() === ''
-                            }
-                            onClick={() =>
-                              applyUpdates([
-                                { scope: 'RFQ', partIndex: -1, key: meta.key, action: 'ACCEPT' },
-                              ])
-                            }
-                          >
-                            Accept
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={savingField}
-                            onClick={() => startEdit('RFQ', -1, meta.key, val)}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={savingField}
-                            onClick={() =>
-                              applyUpdates([
-                                { scope: 'RFQ', partIndex: -1, key: meta.key, action: 'REJECT' },
-                              ])
-                            }
-                          >
-                            Reject
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <td className="text-right whitespace-nowrap">
+                        {draft.status !== 'COMMITTED' && !isEditing && (
+                          <div className="inline-flex items-center gap-1.5">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={
+                                savingField || val === null || String(val).trim() === ''
+                              }
+                              onClick={() =>
+                                applyUpdates([
+                                  { scope: 'RFQ', partIndex: -1, key: meta.key, action: 'ACCEPT' },
+                                ])
+                              }
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={savingField}
+                              onClick={() => startEdit('RFQ', -1, meta.key, val)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={savingField}
+                              onClick={() =>
+                                applyUpdates([
+                                  { scope: 'RFQ', partIndex: -1, key: meta.key, action: 'REJECT' },
+                                ])
+                              }
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
@@ -692,128 +694,132 @@ export function IntakePage() {
                     )}
                   </div>
 
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Part Field</th>
-                        <th>Extracted / Current Value</th>
-                        <th>Source Attribution</th>
-                        <th>Status</th>
-                        <th className="text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {PART_FIELDS_META.map((meta) => {
-                        const field = findField('PART', partIdx, meta.key);
-                        const rowEditKey = `PART:${partIdx}:${meta.key}`;
-                        const isEditing = editingKey === rowEditKey;
-                        const val = field?.value ?? null;
-                        const isMissingRequired =
-                          meta.required && (val === null || String(val).trim() === '');
-
-                        return (
-                          <tr
-                            key={meta.key}
-                            className={isMissingRequired ? 'bg-amber-50/40' : undefined}
-                          >
-                            <td className="font-medium text-gray-900 text-sm">
-                              {meta.label}
-                              {meta.required && <span className="text-red-500 ml-0.5">*</span>}
-                            </td>
-
-                            <td className="text-sm">
-                              {isEditing ? (
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type={meta.isNumeric ? 'number' : 'text'}
-                                    step={meta.isNumeric ? 'any' : undefined}
-                                    value={editingValue}
-                                    onChange={(e) => setEditingValue(e.target.value)}
-                                    className="rounded border border-gray-300 px-2.5 py-1 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                  />
-                                  <Button
-                                    size="sm"
-                                    onClick={() => saveEdit('PART', partIdx, meta.key)}
-                                    loading={savingField}
-                                  >
-                                    Save
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setEditingKey(null)}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              ) : val !== null && String(val).trim() !== '' ? (
-                                <span className="font-mono text-gray-900">{String(val)}</span>
-                              ) : (
-                                <span className="text-xs text-amber-700 font-medium">
-                                  Missing — click Edit to enter
-                                </span>
-                              )}
-                            </td>
-
-                            <td>{formatProvenance(field)}</td>
-
-                            <td>{fieldStatusBadge(field?.status ?? 'PENDING')}</td>
-
-                            <td className="text-right">
-                              {draft.status !== 'COMMITTED' && !isEditing && (
-                                <div className="inline-flex items-center gap-1.5">
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    disabled={
-                                      savingField || val === null || String(val).trim() === ''
-                                    }
-                                    onClick={() =>
-                                      applyUpdates([
-                                        {
-                                          scope: 'PART',
-                                          partIndex: partIdx,
-                                          key: meta.key,
-                                          action: 'ACCEPT',
-                                        },
-                                      ])
-                                    }
-                                  >
-                                    Accept
-                                  </Button>
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    disabled={savingField}
-                                    onClick={() => startEdit('PART', partIdx, meta.key, val)}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled={savingField}
-                                    onClick={() =>
-                                      applyUpdates([
-                                        {
-                                          scope: 'PART',
-                                          partIndex: partIdx,
-                                          key: meta.key,
-                                          action: 'REJECT',
-                                        },
-                                      ])
-                                    }
-                                  >
-                                    Reject
-                                  </Button>
-                                </div>
-                              )}
-                            </td>
+                  <div className="border border-gray-200 rounded-md overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Part Field</th>
+                            <th>Extracted / Current Value</th>
+                            <th>Source Attribution</th>
+                            <th>Status</th>
+                            <th className="text-right">Action</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                        </thead>
+                        <tbody>
+                          {PART_FIELDS_META.map((meta) => {
+                            const field = findField('PART', partIdx, meta.key);
+                            const rowEditKey = `PART:${partIdx}:${meta.key}`;
+                            const isEditing = editingKey === rowEditKey;
+                            const val = field?.value ?? null;
+                            const isMissingRequired =
+                              meta.required && (val === null || String(val).trim() === '');
+
+                            return (
+                              <tr
+                                key={meta.key}
+                                className={isMissingRequired ? 'bg-amber-50/40' : undefined}
+                              >
+                                <td className="font-medium text-gray-900 text-sm whitespace-nowrap">
+                                  {meta.label}
+                                  {meta.required && <span className="text-red-500 ml-0.5">*</span>}
+                                </td>
+
+                                <td className="text-sm">
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type={meta.isNumeric ? 'number' : 'text'}
+                                        step={meta.isNumeric ? 'any' : undefined}
+                                        value={editingValue}
+                                        onChange={(e) => setEditingValue(e.target.value)}
+                                        className="h-8 rounded-md border border-gray-300 px-2.5 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={() => saveEdit('PART', partIdx, meta.key)}
+                                        loading={savingField}
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setEditingKey(null)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  ) : val !== null && String(val).trim() !== '' ? (
+                                    <span className="font-mono text-gray-900">{String(val)}</span>
+                                  ) : (
+                                    <span className="text-xs text-amber-700 font-medium">
+                                      Missing — click Edit to enter
+                                    </span>
+                                  )}
+                                </td>
+
+                                <td>{formatProvenance(field)}</td>
+
+                                <td className="whitespace-nowrap">{fieldStatusBadge(field?.status ?? 'PENDING')}</td>
+
+                                <td className="text-right whitespace-nowrap">
+                                  {draft.status !== 'COMMITTED' && !isEditing && (
+                                    <div className="inline-flex items-center gap-1.5">
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={
+                                          savingField || val === null || String(val).trim() === ''
+                                        }
+                                        onClick={() =>
+                                          applyUpdates([
+                                            {
+                                              scope: 'PART',
+                                              partIndex: partIdx,
+                                              key: meta.key,
+                                              action: 'ACCEPT',
+                                            },
+                                          ])
+                                        }
+                                      >
+                                        Accept
+                                      </Button>
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={savingField}
+                                        onClick={() => startEdit('PART', partIdx, meta.key, val)}
+                                      >
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={savingField}
+                                        onClick={() =>
+                                          applyUpdates([
+                                            {
+                                              scope: 'PART',
+                                              partIndex: partIdx,
+                                              key: meta.key,
+                                              action: 'REJECT',
+                                            },
+                                          ])
+                                        }
+                                      >
+                                        Reject
+                                      </Button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
