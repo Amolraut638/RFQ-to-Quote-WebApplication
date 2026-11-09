@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { rfqApi, costingApi, quoteApi } from '../api';
 import {
+  LostReason,
   Part,
   QuoteSummary,
   QuoteStatus,
@@ -17,6 +18,7 @@ import {
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
+import { LOST_REASON_OPTIONS, formatLostReason } from './RFQListPage';
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
@@ -43,21 +45,29 @@ function formatInr(str: string): string {
 
 function rfqStatusVariant(status: RFQStatus): 'blue' | 'yellow' | 'green' | 'gray' | 'red' {
   switch (status) {
-    case 'ESTIMATING':       return 'blue';
-    case 'PENDING_APPROVAL': return 'yellow';
-    case 'SENT':             return 'green';
-    case 'WON':              return 'green';
-    case 'LOST':             return 'gray';
+    case 'ESTIMATING':
+    case 'PENDING_APPROVAL':
+      return 'blue';
+    case 'SENT':
+      return 'yellow';
+    case 'WON':
+      return 'green';
+    case 'LOST':
+      return 'red';
   }
 }
 
 function rfqStatusLabel(status: RFQStatus): string {
   switch (status) {
-    case 'ESTIMATING':       return 'Estimating';
-    case 'PENDING_APPROVAL': return 'Pending Approval';
-    case 'SENT':             return 'Sent';
-    case 'WON':              return 'Won';
-    case 'LOST':             return 'Lost';
+    case 'ESTIMATING':
+    case 'PENDING_APPROVAL':
+      return 'Estimating';
+    case 'SENT':
+      return 'Sent';
+    case 'WON':
+      return 'Won';
+    case 'LOST':
+      return 'Lost';
   }
 }
 
@@ -232,14 +242,26 @@ export function RFQDetailPage() {
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareError, setCompareError] = useState('');
 
-  useEffect(() => {
-    if (!id) return;
+  // Commercial Outcome update state (Sales Head)
+  const [outcomeSubmitting, setOutcomeSubmitting] = useState(false);
+  const [outcomeError, setOutcomeError] = useState('');
+  const [showLostModal, setShowLostModal] = useState(false);
+  const [selectedLostReason, setSelectedLostReason] = useState<LostReason | ''>('');
+  const [lostReasonNote, setLostReasonNote] = useState('');
+  const [lostModalError, setLostModalError] = useState('');
 
+  function loadRfqDetails(rfqId: string) {
     rfqApi
-      .get(id)
+      .get(rfqId)
       .then((res) => setRfq(res.data.data))
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (!id) return;
+
+    loadRfqDetails(id);
 
     costingApi
       .listQuotes(id)
@@ -255,6 +277,52 @@ export function RFQDetailPage() {
       .catch(() => setQuotes([]))
       .finally(() => setQuotesLoading(false));
   }, [id]);
+
+  async function handleMarkWon() {
+    if (!id) return;
+    setOutcomeError('');
+    setOutcomeSubmitting(true);
+    try {
+      await rfqApi.updateOutcome(id, { outcome: 'WON' });
+      loadRfqDetails(id);
+    } catch (err: unknown) {
+      setOutcomeError(err instanceof Error ? err.message : 'Failed to mark RFQ as Won');
+    } finally {
+      setOutcomeSubmitting(false);
+    }
+  }
+
+  async function handleConfirmLost() {
+    if (!id) return;
+    if (!selectedLostReason) {
+      setLostModalError('Please select a reason for losing this RFQ.');
+      return;
+    }
+    if (selectedLostReason === 'OTHER' && lostReasonNote.trim().length < 5) {
+      setLostModalError(
+        'Please provide a meaningful explanation (at least 5 characters) when selecting "Other".',
+      );
+      return;
+    }
+
+    setLostModalError('');
+    setOutcomeSubmitting(true);
+    try {
+      await rfqApi.updateOutcome(id, {
+        outcome: 'LOST',
+        lostReason: selectedLostReason,
+        ...(lostReasonNote.trim() ? { lostReasonNote: lostReasonNote.trim() } : {}),
+      });
+      setShowLostModal(false);
+      setSelectedLostReason('');
+      setLostReasonNote('');
+      loadRfqDetails(id);
+    } catch (err: unknown) {
+      setLostModalError(err instanceof Error ? err.message : 'Failed to mark RFQ as Lost');
+    } finally {
+      setOutcomeSubmitting(false);
+    }
+  }
 
   async function runRevisionCompare(vA = versionA, vB = versionB) {
     if (quotes.length === 0) return;
@@ -315,8 +383,8 @@ export function RFQDetailPage() {
       </Link>
 
       {/* RFQ Header Card */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <div className="flex items-start justify-between">
+      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-1">
               <span className="font-mono text-lg font-semibold text-gray-900">{rfq.rfqNo}</span>
@@ -327,9 +395,46 @@ export function RFQDetailPage() {
             </div>
             <p className="text-gray-700 text-base">{rfq.customer}</p>
           </div>
+
+          {user?.role === 'SALES_HEAD' &&
+            rfq.status === 'SENT' &&
+            (rfq.hasSentQuote || quotes.some((q) => q.status === 'SENT')) && (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={outcomeSubmitting}
+                  onClick={() => void handleMarkWon()}
+                  className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                >
+                  {outcomeSubmitting ? 'Saving…' : 'Mark as Won'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={outcomeSubmitting}
+                  onClick={() => {
+                    setOutcomeError('');
+                    setSelectedLostReason('');
+                    setLostReasonNote('');
+                    setLostModalError('');
+                    setShowLostModal(true);
+                  }}
+                  className="text-red-700 border-red-300 hover:bg-red-50"
+                >
+                  Mark as Lost
+                </Button>
+              </div>
+            )}
         </div>
 
-        <dl className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+        {outcomeError && (
+          <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+            {outcomeError}
+          </div>
+        )}
+
+        <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           <div>
             <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Due Date</dt>
             <dd className={`mt-1 tabular ${rfq.isOverdue ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
@@ -344,8 +449,143 @@ export function RFQDetailPage() {
             <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned To</dt>
             <dd className="mt-1 text-gray-900">{ownerName(rfq.ownerId)}</dd>
           </div>
+          <div>
+            <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Commercial Outcome
+            </dt>
+            <dd className="mt-1 text-gray-900 font-medium">
+              {rfqStatusLabel(rfq.status)}
+              {rfq.outcomeUpdatedAt && (
+                <span className="block text-xs text-gray-500 font-normal">
+                  Updated {formatDateTime(rfq.outcomeUpdatedAt)}
+                  {rfq.outcomeUpdatedBy
+                    ? ` by ${userDisplay(rfq.outcomeUpdatedBy as RevisionUserSummary)}`
+                    : ''}
+                </span>
+              )}
+            </dd>
+          </div>
         </dl>
+
+        {rfq.status === 'LOST' && rfq.lostReason && (
+          <div className="p-3.5 rounded-md bg-red-50/70 border border-red-200 text-sm space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-red-800">
+                Lost Reason:
+              </span>
+              <span className="font-semibold text-red-900">
+                {formatLostReason(rfq.lostReason)}
+              </span>
+            </div>
+            {rfq.lostReasonNote && (
+              <p className="text-xs text-red-800">
+                <span className="font-medium">Note:</span> {rfq.lostReasonNote}
+              </p>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Lost Reason Modal Dialog (Sales Head) */}
+      {showLostModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="detail-lost-reason-dialog-title"
+        >
+          <div className="bg-white rounded-lg border border-gray-200 shadow-xl max-w-md w-full p-6 space-y-4">
+            <div>
+              <h2
+                id="detail-lost-reason-dialog-title"
+                className="text-base font-semibold text-gray-900"
+              >
+                Mark RFQ as Lost — {rfq.rfqNo}
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Customer: <span className="font-medium text-gray-700">{rfq.customer}</span>. Please
+                select the primary commercial reason for losing this RFQ.
+              </p>
+            </div>
+
+            {lostModalError && (
+              <div className="p-2.5 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+                {lostModalError}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label
+                  htmlFor="detail-lost-reason-select"
+                  className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1"
+                >
+                  Lost Reason <span className="text-red-600">*</span>
+                </label>
+                <select
+                  id="detail-lost-reason-select"
+                  value={selectedLostReason}
+                  onChange={(e) => setSelectedLostReason(e.target.value as LostReason | '')}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">Select a reason…</option>
+                  {LOST_REASON_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="detail-lost-reason-note"
+                  className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1"
+                >
+                  Explanatory Note{' '}
+                  {selectedLostReason === 'OTHER' ? (
+                    <span className="text-red-600">* (Required for Other)</span>
+                  ) : (
+                    <span className="text-gray-400 font-normal">(Optional)</span>
+                  )}
+                </label>
+                <textarea
+                  id="detail-lost-reason-note"
+                  rows={3}
+                  maxLength={500}
+                  value={lostReasonNote}
+                  onChange={(e) => setLostReasonNote(e.target.value)}
+                  placeholder={
+                    selectedLostReason === 'OTHER'
+                      ? 'Provide a clear explanation (min 5 characters)…'
+                      : 'Optional details (e.g., competitor price gap, lead-time constraint)…'
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowLostModal(false)}
+                disabled={outcomeSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => void handleConfirmLost()}
+                disabled={outcomeSubmitting}
+              >
+                {outcomeSubmitting ? 'Saving…' : 'Confirm Mark as Lost'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Parts List */}
       <div>

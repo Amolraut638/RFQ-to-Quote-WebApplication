@@ -2,6 +2,8 @@ import api from './client';
 import {
   User,
   RFQ,
+  RFQEvent,
+  LostReason,
   Part,
   ApiResponse,
   CostingContext,
@@ -37,6 +39,19 @@ export const rfqApi = {
 
   get: (id: string) =>
     api.get<ApiResponse<RFQ & { parts: Part[] }>>(`/api/rfqs/${id}`),
+
+  updateOutcome: (
+    rfqId: string,
+    body: {
+      outcome: 'WON' | 'LOST';
+      lostReason?: LostReason;
+      lostReasonNote?: string;
+    },
+  ) =>
+    api.patch<ApiResponse<{ rfq: RFQ; auditEvent: RFQEvent }>>(
+      `/api/rfqs/${rfqId}/outcome`,
+      body,
+    ),
 };
 
 export const costingApi = {

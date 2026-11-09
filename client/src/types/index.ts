@@ -5,6 +5,14 @@ export type UserRole = 'ESTIMATOR' | 'SALES_HEAD';
 
 export type RFQStatus = 'ESTIMATING' | 'PENDING_APPROVAL' | 'SENT' | 'WON' | 'LOST';
 
+export type LostReason =
+  | 'PRICE_TOO_HIGH'
+  | 'DELIVERY_TIMELINE'
+  | 'COMPETITOR_SELECTED'
+  | 'TECHNICAL_REJECTION'
+  | 'CUSTOMER_CANCELLED'
+  | 'OTHER';
+
 export type QuoteStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'READY_FOR_SALES' | 'SENT';
 
 export interface User {
@@ -17,6 +25,20 @@ export interface User {
   updatedAt: string;
 }
 
+export interface RFQEvent {
+  _id: string;
+  rfqId: string;
+  action: 'SENT' | 'WON' | 'LOST';
+  previousStatus: RFQStatus;
+  newStatus: 'SENT' | 'WON' | 'LOST';
+  actorId: PopulatedUserRef | string;
+  timestamp: string;
+  lostReason?: LostReason;
+  lostReasonNote?: string;
+  quoteId?: string;
+  quoteVersion?: number;
+}
+
 export interface RFQ {
   _id: string;
   rfqNo: string;
@@ -25,9 +47,17 @@ export interface RFQ {
   dueDate: string;
   ownerId: User | string;
   status: RFQStatus;
-  lostReason?: string;
+  lostReason?: LostReason | string;
+  lostReasonNote?: string;
+  outcomeUpdatedBy?: PopulatedUserRef | User | string | null;
+  outcomeUpdatedAt?: string;
   isOverdue?: boolean;
   partName?: string;
+  partCount?: number;
+  latestQuoteStatus?: QuoteStatus | null;
+  latestQuoteVersion?: number | null;
+  hasSentQuote?: boolean;
+  outcomeEvents?: RFQEvent[];
   createdAt: string;
   updatedAt: string;
 }
